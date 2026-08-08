@@ -1,0 +1,5 @@
+# pnpm 11 设置：允许以下依赖执行构建脚本（pnpm 10+ 默认拦截 postinstall）
+allowBuilds:
+  esbuild: true
+  '@tailwindcss/oxide': true
+  sharp: true

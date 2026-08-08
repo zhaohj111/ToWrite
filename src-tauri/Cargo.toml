@@ -1,0 +1,27 @@
+[package]
+name = "towrite"
+version = "0.5.0"
+description = "拓文 / ToWrite - AI 协作文学写作工具（v0.5 纯本地骨架）"
+authors = ["ToWrite"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "towrite_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["image-png"] }
+tauri-plugin-store = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+zip = { version = "2", features = ["deflate"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+[profile.dev]
+incremental = true

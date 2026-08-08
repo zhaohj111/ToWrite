@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+dist/
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Editor
+.vscode/
+.idea/
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Skills
+.claude/
+.agents/
+skills-lock.yaml
+
+# MD
+ToWrite.md

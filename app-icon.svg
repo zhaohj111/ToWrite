@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#161a24"/>
+      <stop offset="1" stop-color="#0a0c11"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="104" fill="url(#bg)"/>
+  <!-- 三页纸张，象征章节，取自水墨色板 -->
+  <rect x="150" y="108" width="150" height="296" rx="18" fill="#d7b25c"/>
+  <rect x="212" y="130" width="150" height="296" rx="18" fill="#d08a76" opacity="0.94"/>
+  <rect x="274" y="152" width="150" height="296" rx="18" fill="#7ba6a0" opacity="0.95"/>
+  <!-- 顶部墨点 -->
+  <circle cx="225" cy="176" r="13" fill="#0a0c11"/>
+  <circle cx="287" cy="198" r="13" fill="#0a0c11"/>
+  <circle cx="349" cy="220" r="13" fill="#0a0c11"/>
+</svg>
