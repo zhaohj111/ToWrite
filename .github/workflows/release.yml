@@ -86,9 +86,10 @@ jobs:
           ];
           for (const [p, re, rep] of files) {
             const s = fs.readFileSync(p, 'utf8');
-            const out = s.replace(re, rep);
-            if (out === s) throw new Error('版本字段未匹配到，请检查: ' + p);
-            fs.writeFileSync(p, out);
+            // 先确认字段存在（不能靠替换后内容是否变化来判断：
+            // tag 版本与提交版本相同时替换结果是原样，会误判成"未匹配"）
+            if (!re.test(s)) throw new Error('版本字段未匹配到，请检查: ' + p);
+            fs.writeFileSync(p, s.replace(re, rep));
             console.log('patched', p, '->', v);
           }
           EOF
