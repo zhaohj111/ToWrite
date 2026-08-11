@@ -4,7 +4,7 @@
 import { AlertCircle, CheckCircle2, Download, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SettingToggle } from "@/components/settings/controls";
-import { appVersion } from "@/components/settings/pages/aboutApp";
+import { useAppVersion } from "@/lib/appInfo";
 import { useUpdateStore } from "@/stores/updateStore";
 import { cn } from "@/lib/cn";
 
@@ -16,6 +16,7 @@ function fmtSize(bytes: number): string {
 }
 
 export function UpdateControl() {
+  const version = useAppVersion();
   const phase = useUpdateStore((s) => s.phase);
   const autoCheck = useUpdateStore((s) => s.autoCheck);
   const setAutoCheck = useUpdateStore((s) => s.setAutoCheck);
@@ -37,7 +38,7 @@ export function UpdateControl() {
     <div className="flex w-full flex-col gap-4">
       {/* 当前版本 + 自动检查开关 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="font-mono text-[15px] text-fg">{appVersion()}</span>
+        <span className="font-mono text-[15px] text-fg">{version}</span>
         <label className="flex items-center gap-2 text-[13px] text-fg-muted">
           启动时自动检查更新
           <SettingToggle checked={autoCheck} onChange={setAutoCheck} />

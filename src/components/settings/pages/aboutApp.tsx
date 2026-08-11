@@ -1,19 +1,14 @@
-// 关于 > 关于应用：版本号（读 i18n 贡献，与界面同步）、开源许可、反馈与文档入口（占位）。
+// 关于 > 关于应用：版本号（读编译进二进制的版本，Tauri getVersion；浏览器开发回退常量）、
+// 开源许可、反馈与文档入口（占位）。
 
 import { ExternalLink, Github } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { isTauri } from "@/lib/tauri";
-import { pluginRegistry } from "@/plugins/registry";
-
-/** 当前应用版本：读 i18n 贡献（与界面同步），缺省回退 0.6.0；更新控件复用 */
-export function appVersion(): string {
-  const res = pluginRegistry.getContributions("i18n.resources");
-  const zh = res.find((r) => r.locale === "zh-CN");
-  return zh?.resources?.["app.version"] ?? "0.6.0";
-}
+import { useAppVersion } from "@/lib/appInfo";
 
 export function VersionInfo() {
-  return <span className="font-mono text-[15px] text-fg">{appVersion()}</span>;
+  const version = useAppVersion();
+  return <span className="font-mono text-[15px] text-fg">{version}</span>;
 }
 
 /** 作者（开发者署名，链接到 GitHub；Tauri 下用 opener 插件在系统浏览器打开） */

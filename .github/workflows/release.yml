@@ -7,9 +7,8 @@
 #
 # 版本号由 tag 派生（v0.7.0 → 0.7.0），自动回写到：
 #   - src-tauri/tauri.conf.json           安装包名 / 版本
-#   - src-tauri/Cargo.toml                编译版本（应用内更新检查据此比较）
-#   - src/plugins/modules/coreEditor      设置页「关于」显示的版本号（i18n app.version）
-# 其余文件保持提交时的内容。
+#   - src-tauri/Cargo.toml                编译版本（二进制版本 = 应用内「关于」显示 + 更新检查比对）
+# 其余文件保持提交时的内容；前端显示的版本号由编译产物读取，无需回写。
 
 name: Release
 
@@ -82,7 +81,6 @@ jobs:
           const files = [
             ['src-tauri/tauri.conf.json', /"version":\s*"[^"]+"/, `"version": "${v}"`],
             ['src-tauri/Cargo.toml', /^version\s*=\s*"[^"]+"/m, `version = "${v}"`],
-            ['src/plugins/modules/coreEditor/index.tsx', /"app\.version":\s*"[^"]+"/, `"app.version": "${v}"`],
           ];
           for (const [p, re, rep] of files) {
             const s = fs.readFileSync(p, 'utf8');

@@ -172,7 +172,7 @@ export const coreEditorModule: ModuleContract = {
     // ---- i18n.resources / theme 贡献点（骨架）----
     ctx.registerContribution("i18n.resources", {
       locale: "zh-CN",
-      resources: { "app.name": "拓文 / ToWrite", "app.version": "0.6.0" },
+      resources: { "app.name": "拓文 / ToWrite" },
     });
     ctx.registerContribution("theme", {
       id: "ink",
