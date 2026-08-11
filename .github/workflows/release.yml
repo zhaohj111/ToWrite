@@ -1,0 +1,111 @@
+# 发版自动化：打 vX.Y.Z 的 tag 后，自动在 Windows / macOS / Linux 三平台构建安装包，
+# 并自动创建/更新 GitHub Release、上传全部安装包（对接应用内「检查更新」）。
+#
+# 触发方式二选一：
+#   1) 命令行：git tag v0.7.0 && git push origin v0.7.0
+#   2) GitHub 网页：仓库 → Releases → Draft a new release → 输入 tag 名 v0.7.0 → Publish
+#
+# 版本号由 tag 派生（v0.7.0 → 0.7.0），自动回写到：
+#   - src-tauri/tauri.conf.json           安装包名 / 版本
+#   - src-tauri/Cargo.toml                编译版本（应用内更新检查据此比较）
+#   - src/plugins/modules/coreEditor      设置页「关于」显示的版本号（i18n app.version）
+# 其余文件保持提交时的内容。
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+# 同一 tag 只允许一个构建在跑，避免重复发版
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false # 一个平台失败不取消其他平台
+      matrix:
+        include:
+          # macOS：Apple Silicon + Intel 双架构
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+          # Linux：deb + AppImage（跳过 rpm，GitHub runner 无 rpmbuild）
+          - platform: 'ubuntu-22.04'
+            args: '--bundles deb,appimage'
+          # Windows：NSIS 安装包 + MSI
+          - platform: 'windows-latest'
+            args: '--bundles nsis,msi'
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # macOS 需要同时装 aarch64 与 x86_64 两个目标才能交叉编译
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      # 从 tag 派生版本号并回写到三处（见文件头注释）。脚本跨平台，Windows 也用 bash。
+      - name: Sync version from tag
+        shell: bash
+        env:
+          TAG_VERSION: ${{ github.ref_name }}
+        run: |
+          echo "Syncing version from tag: ${TAG_VERSION}"
+          node - <<'EOF'
+          const fs = require('fs');
+          const v = process.env.TAG_VERSION.replace(/^v/i, '');
+          const files = [
+            ['src-tauri/tauri.conf.json', /"version":\s*"[^"]+"/, `"version": "${v}"`],
+            ['src-tauri/Cargo.toml', /^version\s*=\s*"[^"]+"/m, `version = "${v}"`],
+            ['src/plugins/modules/coreEditor/index.tsx', /"app\.version":\s*"[^"]+"/, `"app.version": "${v}"`],
+          ];
+          for (const [p, re, rep] of files) {
+            const s = fs.readFileSync(p, 'utf8');
+            const out = s.replace(re, rep);
+            if (out === s) throw new Error('版本字段未匹配到，请检查: ' + p);
+            fs.writeFileSync(p, out);
+            console.log('patched', p, '->', v);
+          }
+          EOF
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 构建并发布：自动创建/复用对应 tag 的 Release，上传全部安装包。
+      # 第一个完成的平台负责建 Release，其余平台把产物传进同一个 Release。
+      - name: Build and release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: '拓文 ToWrite v__VERSION__'
+          releaseBody: '由 GitHub Actions 自动构建的 ToWrite 安装包。更新日志见应用内「关于 > 更新日志」。'
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
