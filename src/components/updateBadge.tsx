@@ -14,3 +14,15 @@ export function UpdateBadge() {
     />
   );
 }
+
+/** 内联红点（非绝对定位）：设置导航等行内场景，有更新时在文本后显示 */
+export function UpdateDot() {
+  const available = useUpdateStore((s) => s.available);
+  if (!available) return null;
+  return (
+    <span
+      className="ml-1.5 inline-block size-2 shrink-0 self-center rounded-full bg-danger"
+      title="有新版本可用"
+    />
+  );
+}

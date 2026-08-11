@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { SETTINGS_GROUPS, type SettingsPageContribution } from "@/types/settings";
+import { UpdateDot } from "@/components/updateBadge";
 import { cn } from "@/lib/cn";
 
 const GROUP_ICONS: Record<string, LucideIcon> = {
@@ -78,6 +79,8 @@ export function SettingsNav({
               >
                 <Icon className="size-[18px] shrink-0" />
                 <span className="min-w-0 flex-1 truncate text-[15px]">{g.title}</span>
+                {/* 有更新时在「关于」分类旁打点，引导用户找到更新入口 */}
+                {g.id === "about" && <UpdateDot />}
                 <span className="shrink-0 text-xs tabular-nums text-fg-muted/70">
                   {pageCount(g.id)}
                 </span>
@@ -128,6 +131,8 @@ export function SettingsNav({
                 )}
               >
                 <span className="truncate">{p.title}</span>
+                {/* 有更新时在「关于应用」页旁打点（更新入口就在该页的「版本与更新」） */}
+                {p.id === "about.app" && <UpdateDot />}
                 {pageDisabled(p) && (
                   <span className="ml-auto shrink-0 text-[11px] text-fg-muted">需工程</span>
                 )}
