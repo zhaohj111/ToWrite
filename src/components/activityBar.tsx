@@ -3,11 +3,13 @@
 // 拖动时只显示目标位置的朱砂插入细线，松开后重排并随工程配置（.writeproj）持久化。
 
 import { useEffect, useRef, useState } from "react";
-import { Home } from "lucide-react";
+import { Home, Settings } from "lucide-react";
 import { useActivityItems, type ActivityItem } from "@/plugins/hooks";
 import { useLayoutStore } from "@/stores/layoutStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { usePluginStore, type PluginInstance } from "@/stores/pluginStore";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { UpdateBadge } from "@/components/updateBadge";
 import { cn } from "@/lib/cn";
 
 /** 每行入口高度（h-12） */
@@ -177,6 +179,15 @@ export function ActivityBar() {
         onClick={closeProject}
       >
         <Home className="size-5 transition-transform duration-200 group-hover:scale-110" />
+      </button>
+      {/* 静态设置入口：非插件实例行，不参与拖拽排序 */}
+      <button
+        title="设置"
+        className="group relative flex h-12 w-full items-center justify-center border-t border-line/60 text-fg-muted transition-all duration-200 hover:text-accent"
+        onClick={() => useWorkspaceStore.getState().openSettings()}
+      >
+        <Settings className="size-5 transition-transform duration-200 group-hover:rotate-45 group-hover:scale-110" />
+        <UpdateBadge />
       </button>
     </div>
   );

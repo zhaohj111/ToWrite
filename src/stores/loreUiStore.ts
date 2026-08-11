@@ -2,16 +2,14 @@
 // 按插件实例隔离；含视图导航历史（撤销/重做可返回搜索结果等）。
 // 注意：内容编辑的撤销/重做由卡片富文本编辑器自身负责（TipTap），此处只管视图状态。
 // 标签筛选为追加式（activeTags 命中任一即入结果）；连接线颜色/关系文本颜色供新建连线/改名时起效，
-// 并持久化到程序配置（config.json），避免每次打开工程恢复默认色。
+// 并按工程隔离：随工程写入 settingsStore.instanceSettings（project-config.json），
+// 打开工程时由 projectStore 读回（restoreProjectColors），关闭工程时 reset 清空。
 
 import { create } from "zustand";
-import { getSetting, setSetting } from "@/lib/settings";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 /** 连接线 / 关系文本缺省颜色（与 loreGraph 的 DEFAULT_EDGE_COLOR 一致） */
 export const DEFAULT_LORE_EDGE_COLOR = "#8a8f98";
-/** 持久化配置键 */
-const KEY_EDGE_COLOR = "lore.edgeColor";
-const KEY_EDGE_LABEL_COLOR = "lore.edgeLabelColor";
 
 export type LoreLayout = "graph" | "grid";
 
@@ -67,14 +65,16 @@ const MAX_HISTORY = 50;
 
 interface LoreUiState {
   slices: Record<string, LoreUiSlice>;
-  /** 全局缺省连接线颜色（持久化；实例未单独设置时生效） */
+  /** 会话内缺省连接线颜色（实例未单独设置时生效；随工程重置为默认色） */
   edgeColor: string;
-  /** 全局缺省关系文本颜色（持久化；实例未单独设置时生效） */
+  /** 会话内缺省关系文本颜色（实例未单独设置时生效；随工程重置为默认色） */
   edgeLabelColor: string;
   reset: () => void;
   getSlice: (instanceId: string) => LoreUiSlice;
-  /** 启动时从配置读取持久化的颜色 */
+  /** 启动时初始化缺省颜色（颜色已改为工程隔离，不再从 config.json 读取） */
   init: () => Promise<void>;
+  /** 打开工程：从工程持久化颜色恢复（实例 id -> 当前连线/关系文本颜色） */
+  loadProject: (colors: Record<string, { edgeColor?: string; edgeLabelColor?: string }>) => void;
   /** 切换到图/网格布局 */
   setLayout: (instanceId: string, layout: LoreLayout) => void;
   /** 提交搜索词（入历史） */
@@ -104,32 +104,35 @@ export const useLoreUiStore = create<LoreUiState>((set, get) => ({
   edgeColor: DEFAULT_LORE_EDGE_COLOR,
   edgeLabelColor: DEFAULT_LORE_EDGE_COLOR,
 
-  reset: () => set({ slices: {} }),
+  reset: () =>
+    set({
+      slices: {},
+      edgeColor: DEFAULT_LORE_EDGE_COLOR,
+      edgeLabelColor: DEFAULT_LORE_EDGE_COLOR,
+    }),
 
   getSlice: (instanceId) => get().slices[instanceId] ?? EMPTY_LORE_UI_SLICE,
 
   init: async () => {
-    const edgeColor = await getSetting<string>(KEY_EDGE_COLOR, DEFAULT_LORE_EDGE_COLOR);
-    const edgeLabelColor = await getSetting<string>(
-      KEY_EDGE_LABEL_COLOR,
-      DEFAULT_LORE_EDGE_COLOR,
-    );
+    // 颜色已改为工程隔离（settingsStore.instanceSettings），此处仅初始化默认色
+    set({ edgeColor: DEFAULT_LORE_EDGE_COLOR, edgeLabelColor: DEFAULT_LORE_EDGE_COLOR });
+  },
+
+  loadProject: (colors) =>
     set((s) => ({
-      edgeColor,
-      edgeLabelColor,
-      // 把全局颜色补到尚未单独设置的实例上
+      edgeColor: DEFAULT_LORE_EDGE_COLOR,
+      edgeLabelColor: DEFAULT_LORE_EDGE_COLOR,
       slices: Object.fromEntries(
-        Object.entries(s.slices).map(([id, sl]) => [
+        Object.entries(colors).map(([id, c]) => [
           id,
           {
-            ...sl,
-            edgeColor: sl.edgeColor ?? edgeColor,
-            edgeLabelColor: sl.edgeLabelColor ?? edgeLabelColor,
+            ...(s.slices[id] ?? EMPTY_LORE_UI_SLICE),
+            edgeColor: c.edgeColor ?? DEFAULT_LORE_EDGE_COLOR,
+            edgeLabelColor: c.edgeLabelColor ?? DEFAULT_LORE_EDGE_COLOR,
           },
         ]),
       ),
-    }));
-  },
+    })),
 
   // 切到力导向图时清空搜索/标签筛选（否则网格会被强制展示）；可用撤销找回
   setLayout: (instanceId, layout) =>
@@ -208,25 +211,28 @@ export const useLoreUiStore = create<LoreUiState>((set, get) => ({
       }),
     ),
 
-  setEdgeColor: (instanceId, color) =>
+  setEdgeColor: (instanceId, color) => {
     set((s) => {
       const slice = s.slices[instanceId] ?? EMPTY_LORE_UI_SLICE;
-      void setSetting(KEY_EDGE_COLOR, color);
       return {
         edgeColor: color,
         slices: { ...s.slices, [instanceId]: { ...slice, edgeColor: color } },
       };
-    }),
+    });
+    // 写入实例设置（settingsStore 已订阅 saveController → 随工程落盘，工程隔离）
+    useSettingsStore.getState().setInstanceSetting(instanceId, "edgeColor", color);
+  },
 
-  setEdgeLabelColor: (instanceId, color) =>
+  setEdgeLabelColor: (instanceId, color) => {
     set((s) => {
       const slice = s.slices[instanceId] ?? EMPTY_LORE_UI_SLICE;
-      void setSetting(KEY_EDGE_LABEL_COLOR, color);
       return {
         edgeLabelColor: color,
         slices: { ...s.slices, [instanceId]: { ...slice, edgeLabelColor: color } },
       };
-    }),
+    });
+    useSettingsStore.getState().setInstanceSetting(instanceId, "edgeLabelColor", color);
+  },
 
   undo: (instanceId) =>
     set((s) => {

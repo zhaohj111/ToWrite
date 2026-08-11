@@ -1,4 +1,5 @@
 mod commands;
+mod updater;
 mod writeproj;
 
 use tauri::Manager;
@@ -7,6 +8,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::list_projects,
             commands::create_project,
@@ -16,7 +18,12 @@ pub fn run() {
             commands::rename_project,
             commands::set_project_note,
             commands::projects_dir,
-            commands::import_project
+            commands::import_project,
+            commands::migrate_data,
+            commands::data_pointer_dir,
+            updater::check_update,
+            updater::download_update,
+            updater::fetch_changelog
         ])
         .setup(|app| {
             // 启动默认最大化（非全屏）：窗口先隐藏再最大化并展示，避免闪烁。

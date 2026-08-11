@@ -27,7 +27,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useTimelineStore } from "@/stores/timelineStore";
-import { useInstanceId, useTimelineSlice } from "@/components/editor/editorInstanceContext";
+import {
+  useInstanceId,
+  useSidebarLabel,
+  useTimelineSlice,
+} from "@/components/editor/editorInstanceContext";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { cn } from "@/lib/cn";
 import type { TimelineFileMeta } from "@/types/writeproj";
@@ -57,6 +61,10 @@ export function TimelineSidebar() {
   const moveFolder = useTimelineStore((s) => s.moveFolder);
   const moveFile = useTimelineStore((s) => s.moveFile);
   const project = useWorkspaceStore((s) => s.project);
+
+  // 侧栏命名配置：文件名 / 文件夹名（可逐实例覆盖，级联生效）
+  const fileLabel = useSidebarLabel("core.timeline", "fileLabel");
+  const folderLabel = useSidebarLabel("core.timeline", "folderLabel");
 
   const [creating, setCreating] = useState<Creating>(null);
   const [draft, setDraft] = useState("");
@@ -126,9 +134,27 @@ export function TimelineSidebar() {
   };
 
   useEffect(() => {
+    // 由指针位置换算插入目标：命中最靠近的 data-drop 元素。
+    // 落点落在列表底部/行间距空白（无 data-drop）时，回退到「最近上方分组的末尾」：
+    // 保证拖到最底部也有正确的追加指示线（此前该空白区无命中，指示线不显示）。
+    const nearestGroupEndAbove = (y: number): HTMLElement | null => {
+      let best: HTMLElement | null = null;
+      let bestDist = Infinity;
+      for (const n of document.querySelectorAll<HTMLElement>('[data-drop="group-end"]')) {
+        const r = n.getBoundingClientRect();
+        const dist = y - r.bottom;
+        if (dist >= -1 && dist < bestDist) {
+          bestDist = dist;
+          best = n;
+        }
+      }
+      return best;
+    };
+
     const computeDrop = (x: number, y: number, d: { kind: string; id: string }): DropTarget => {
       const el = document.elementFromPoint(x, y);
-      const target = el?.closest?.("[data-drop]") as HTMLElement | null;
+      const target =
+        (el?.closest?.("[data-drop]") as HTMLElement | null) ?? nearestGroupEndAbove(y);
       if (!target) return null;
       const { byFolder: bf, top: t, folders: fs } = dataRef.current;
       const drop = target.dataset.drop;
@@ -154,7 +180,22 @@ export function TimelineSidebar() {
 
       if (drop === "group-end") {
         if (d.kind !== "file") return null;
-        return { kind: "file", group: target.dataset.dropGroup ?? "", beforeId: null };
+        const group = target.dataset.dropGroup ?? "";
+        // 光标不在任何行上（行间距/组末空白）：按 y 相对该组各行的上下半定边界——
+        // 光标在某行上半 → 插到该行前；下半 → 插到其后；低于最后一行 → 追加组末。
+        // 指示线落在光标附近，而不是跳到列表最底部（长列表下会被卷出视口、像被遮挡）。
+        const rows = Array.from(
+          target.querySelectorAll<HTMLElement>('[data-drop="file"]'),
+        ).filter((r) => (r.dataset.dropGroup ?? "") === group);
+        let before: string | null = null;
+        for (const r of rows) {
+          const rect = r.getBoundingClientRect();
+          if (y < rect.top + rect.height / 2) {
+            before = r.dataset.dropId ?? null;
+            break;
+          }
+        }
+        return { kind: "file", group, beforeId: before };
       }
 
       return null;
@@ -326,7 +367,7 @@ export function TimelineSidebar() {
           </span>
           <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
             <button
-              title="重命名时间轴"
+              title={`重命名${fileLabel}`}
               onClick={(e) => {
                 e.stopPropagation();
                 startEdit("file", f.id, f.title);
@@ -336,7 +377,7 @@ export function TimelineSidebar() {
               <Pencil className="size-3" />
             </button>
             <button
-              title="删除时间轴"
+              title={`删除${fileLabel}`}
               onClick={(e) => {
                 e.stopPropagation();
                 setConfirm({ kind: "file", id: f.id, title: f.title });
@@ -371,7 +412,7 @@ export function TimelineSidebar() {
 
   const groupEndLine = (group: string) =>
     dropTarget?.kind === "file" && dropTarget.group === group && dropTarget.beforeId === null ? (
-      <div className="absolute inset-x-1 -bottom-0.5 h-0.5 rounded-full bg-accent" />
+      <div className="absolute inset-x-1 -bottom-0.5 z-10 h-0.5 rounded-full bg-accent" />
     ) : null;
 
   return (
@@ -384,7 +425,7 @@ export function TimelineSidebar() {
         <Button
           size="icon"
           variant="ghost"
-          title="新建分卷"
+          title={`新建${folderLabel}`}
           onClick={() => startCreate({ type: "folder" })}
         >
           <FolderPlus className="size-4" />
@@ -392,7 +433,7 @@ export function TimelineSidebar() {
         <Button
           size="icon"
           variant="ghost"
-          title="新建时间轴"
+          title={`新建${fileLabel}`}
           onClick={() => startCreate({ type: "file" })}
         >
           <FilePlus2 className="size-4" />
@@ -406,8 +447,8 @@ export function TimelineSidebar() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索时间轴…"
-            className="h-7 pl-8 pr-8 text-xs !bg-app focus:!bg-app focus:border-accent/40 focus:ring-0"
+            placeholder={`搜索${fileLabel}…`}
+            className="h-7 pl-8 pr-8 text-xs !bg-app focus:!bg-app focus:border-accent/40 focus:outline-none focus:ring-0"
           />
           {query && (
             <button
@@ -431,7 +472,7 @@ export function TimelineSidebar() {
           return (
             <li key={v.id} className="relative">
               {dropTarget?.kind === "folder" && dropTarget.beforeId === v.id && (
-                <div className="absolute inset-x-1 -top-0.5 h-0.5 rounded-full bg-accent" />
+                <div className="absolute inset-x-1 -top-0.5 z-10 h-0.5 rounded-full bg-accent" />
               )}
               {editing?.kind === "folder" && editing.id === v.id ? (
                 <Input
@@ -474,7 +515,7 @@ export function TimelineSidebar() {
                   <span className="min-w-0 flex-1 truncate">{v.title}</span>
                   <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                     <button
-                      title="在该分卷新建时间轴"
+                      title={`在该${folderLabel}新建${fileLabel}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         startCreate({ type: "file", folderId: v.id });
@@ -484,7 +525,7 @@ export function TimelineSidebar() {
                       <Plus className="size-3" />
                     </button>
                     <button
-                      title="重命名分卷"
+                      title={`重命名${folderLabel}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         startEdit("folder", v.id, v.title);
@@ -494,7 +535,7 @@ export function TimelineSidebar() {
                       <Pencil className="size-3" />
                     </button>
                     <button
-                      title="删除分卷"
+                      title={`删除${folderLabel}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         setConfirm({ kind: "folder", id: v.id, title: v.title });
@@ -520,7 +561,7 @@ export function TimelineSidebar() {
                     </li>
                   ))}
                   {creating?.type === "file" && creating.folderId === v.id && (
-                    <li>{renderCreateInput("输入时间轴名")}</li>
+                    <li>{renderCreateInput(`输入${fileLabel}名`)}</li>
                   )}
                 </ul>
               )}
@@ -528,11 +569,11 @@ export function TimelineSidebar() {
           );
         })}
 
-        {creating?.type === "folder" && <li className="pt-0.5">{renderCreateInput("输入分卷名")}</li>}
+        {creating?.type === "folder" && <li className="pt-0.5">{renderCreateInput(`输入${folderLabel}名`)}</li>}
 
         {shownTop.length > 0 && displayFolders.length > 0 && (
           <li className="px-2.5 pb-0.5 pt-2 text-[11px] font-semibold tracking-[0.14em] text-fg-muted">
-            未分卷
+            未{folderLabel}
           </li>
         )}
         {shownTop.map((f) => (
@@ -542,12 +583,12 @@ export function TimelineSidebar() {
         ))}
 
         {creating?.type === "file" && !creating.folderId && (
-          <li className="pt-0.5">{renderCreateInput("输入时间轴名")}</li>
+          <li className="pt-0.5">{renderCreateInput(`输入${fileLabel}名`)}</li>
         )}
 
         {filtering && shownTop.length === 0 && shownByFolder.size === 0 && (
           <li className="px-2.5 py-8 text-center text-xs text-fg-muted">
-            未找到匹配「{query.trim()}」的时间轴
+            未找到匹配「{query.trim()}」的{fileLabel}
           </li>
         )}
       </ul>
@@ -558,9 +599,9 @@ export function TimelineSidebar() {
           {confirm?.kind === "file" && (
             <>
               <DialogHeader>
-                <DialogTitle>删除时间轴</DialogTitle>
+                <DialogTitle>删除{fileLabel}</DialogTitle>
                 <DialogDescription>
-                  确定删除「{confirm.title}」？该时间轴上的全部标签将一并删除，且无法撤销。
+                  确定删除「{confirm.title}」？该{fileLabel}上的全部标签将一并删除，且无法撤销。
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
@@ -582,9 +623,9 @@ export function TimelineSidebar() {
           {confirm?.kind === "folder" && (
             <>
               <DialogHeader>
-                <DialogTitle>删除分卷</DialogTitle>
+                <DialogTitle>删除{folderLabel}</DialogTitle>
                 <DialogDescription>
-                  「{confirm.title}」共 {byFolder.get(confirm.id)?.length ?? 0} 条时间轴。请选择删除方式：
+                  「{confirm.title}」共 {byFolder.get(confirm.id)?.length ?? 0} 条{fileLabel}。请选择删除方式：
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-2">
@@ -599,9 +640,9 @@ export function TimelineSidebar() {
                     <Folder className="size-4 text-fg-muted" />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium text-fg-strong">只删除分卷</span>
+                    <span className="block text-sm font-medium text-fg-strong">只删除{folderLabel}</span>
                     <span className="block text-xs text-fg-muted">
-                      分卷内的时间轴移到顶层，内容保留
+                      {folderLabel}内的{fileLabel}移到顶层，内容保留
                     </span>
                   </span>
                 </button>
@@ -618,7 +659,7 @@ export function TimelineSidebar() {
                   <span className="min-w-0">
                     <span className="block text-sm font-medium text-danger">同时删除所有内容</span>
                     <span className="block text-xs text-fg-muted">
-                      删除分卷及其中的时间轴，无法撤销
+                      删除{folderLabel}及其中的{fileLabel}，无法撤销
                     </span>
                   </span>
                 </button>

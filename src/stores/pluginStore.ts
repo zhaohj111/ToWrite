@@ -26,11 +26,10 @@ export const EDITOR_PROTOTYPE = "core.editor";
 /** 携带时间轴文档的插件原型（其每个实例在工程内有一份独立文档） */
 export const TIMELINE_PROTOTYPE = "core.timeline";
 
-/** 默认实例：正文 + 大纲（同属 core.editor，各自独立的文档）、时间轴、设定库 */
+/** 默认实例：正文、时间轴、设定库（v0.6 起「大纲」实例随大纲功能一并移除） */
 export function defaultInstances(): PluginInstance[] {
   return [
     { id: "editor", prototypeId: EDITOR_PROTOTYPE, name: "正文", sidebarViewId: "chapters", enabled: true },
-    { id: "outline", prototypeId: EDITOR_PROTOTYPE, name: "大纲", sidebarViewId: "chapters", enabled: true },
     { id: "timeline", prototypeId: TIMELINE_PROTOTYPE, name: "时间轴", sidebarViewId: "timeline-files", enabled: true },
     { id: "lore", prototypeId: "core.lore", name: "设定库", sidebarViewId: "lore", enabled: true },
   ];
@@ -38,8 +37,10 @@ export function defaultInstances(): PluginInstance[] {
 
 /** 实例字段迁移（程序模板与工程实例共用）：
     迁移 1：早期「大纲」曾指向 outline（标题导航）侧栏，无法管理章节，统一改为 chapters
-    迁移 2：早期「时间轴」未启用侧栏（null），现统一启用 timeline-files 文件树 */
-function migrateInstance(inst: PluginInstance): PluginInstance {
+    迁移 2：早期「时间轴」未启用侧栏（null），现统一启用 timeline-files 文件树
+    v0.6：大纲功能整体移除，删除旧「大纲」实例（id "outline"，属 core.editor）；返回 null 表示剔除 */
+function migrateInstance(inst: PluginInstance): PluginInstance | null {
+  if (inst.prototypeId === EDITOR_PROTOTYPE && inst.id === "outline") return null;
   if (inst.prototypeId === EDITOR_PROTOTYPE && inst.sidebarViewId === "outline") {
     return { ...inst, sidebarViewId: "chapters" };
   }
@@ -81,8 +82,10 @@ export const usePluginStore = create<PluginState>((set, get) => ({
   init: async () => {
     const saved = await getSetting<PluginInstance[] | null>(KEY, null);
     if (saved && Array.isArray(saved) && saved.length > 0) {
-      const next = saved.map(migrateInstance);
-      const migrated = next.some((m, i) => m !== saved[i]);
+      const mapped = saved.map(migrateInstance);
+      const next = mapped.filter((i): i is PluginInstance => i !== null);
+      const migrated =
+        next.length !== saved.length || next.some((m, i) => m !== saved[i]);
       set({ template: next, instances: next.map((i) => ({ ...i })) });
       if (migrated) void setSetting(KEY, next);
     } else {
@@ -95,7 +98,9 @@ export const usePluginStore = create<PluginState>((set, get) => ({
   applyProjectInstances: (projectInstances) => {
     const next =
       projectInstances && projectInstances.length > 0
-        ? projectInstances.map(migrateInstance)
+        ? projectInstances
+            .map(migrateInstance)
+            .filter((i): i is PluginInstance => i !== null)
         : get().template.map((i) => ({ ...i }));
     set({ instances: next });
   },

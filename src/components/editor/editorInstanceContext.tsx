@@ -2,6 +2,7 @@
 // 组件据此从对应 store 读取属于自己实例的切片（正文 / 大纲 / 时间轴各自独立）。
 
 import { createContext, useContext } from "react";
+import { useSettingsStore, resolveSetting } from "@/stores/settingsStore";
 import { EMPTY_SLICE, useEditorStore, type EditorSlice } from "@/stores/editorStore";
 import {
   EMPTY_TIMELINE_SLICE,
@@ -21,6 +22,16 @@ export function useEditorInstance(): string {
 /** 当前插件实例 id（正文 / 大纲 / 时间轴…通用的实例上下文） */
 export function useInstanceId(): string {
   return useContext(EditorInstanceContext);
+}
+
+/** 侧栏命名配置（文件名 / 文件夹名）：订阅设置，按级联取当前实例的标签值 */
+export function useSidebarLabel(
+  prototypeId: string,
+  key: "fileLabel" | "folderLabel",
+): string {
+  const instanceId = useInstanceId();
+  useSettingsStore(); // 订阅设置变更（级联值变化时重渲染）
+  return String(resolveSetting(prototypeId, instanceId, key) ?? "");
 }
 
 /** 当前实例的编辑器切片（无则返回空切片） */

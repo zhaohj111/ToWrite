@@ -178,8 +178,13 @@ export interface EditorDoc {
 export interface ProjectConfig {
   /** 工程插件实例列表（含顺序、名称、启停、侧栏变体）；缺省时回退程序级模板 */
   instances?: PluginInstance[];
-  /** 各编辑器实例的字号（px，实例 id -> 字号）；缺省时回退程序级默认字号 */
+  /** 各编辑器实例的字号（px，实例 id -> 字号）；缺省时回退程序级默认字号。
+      v0.6 起不再写入（迁移为 instanceSettings.<id>.fontSize），仅保留读取兼容 */
   editorFontSizes?: Record<string, number>;
+  /** 实例级设置覆盖（级联第 ① 层）：instanceId -> key -> value */
+  instanceSettings?: Record<string, Record<string, unknown>>;
+  /** 该工程的默认主视图（实例 id）；缺省时打开工程回退 "editor" */
+  mainView?: string;
 }
 
 export interface ProjectData {

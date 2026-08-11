@@ -73,6 +73,8 @@ interface TimelineState {
   redoStacks: Record<string, TimelineDoc[]>;
   loadProject: (data: ProjectData, instanceIds: string[]) => void;
   reset: () => void;
+  /** 删除实例时移除其切片（文件夹/文件/节点/图例）与撤销栈，随落盘同步丢弃 */
+  removeSlice: (instanceId: string) => void;
   getSlice: (instanceId: string) => TimelineSlice;
   /** 载入某个文件；无文件时自动创建默认文件并选中 */
   ensureFile: (instanceId: string) => string | null;
@@ -171,6 +173,13 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
   },
 
   reset: () => set({ slices: {}, undoStacks: {}, redoStacks: {} }),
+
+  removeSlice: (instanceId) => {
+    const { [instanceId]: _gone, ...slices } = get().slices;
+    const { [instanceId]: _u, ...undoStacks } = get().undoStacks;
+    const { [instanceId]: _r, ...redoStacks } = get().redoStacks;
+    set({ slices, undoStacks, redoStacks });
+  },
 
   getSlice: (instanceId) => get().slices[instanceId] ?? EMPTY_TIMELINE_SLICE,
 

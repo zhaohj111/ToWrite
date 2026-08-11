@@ -111,6 +111,8 @@ interface LoreState {
   redoStacks: Record<string, LoreDoc[]>;
   loadProject: (data: ProjectData, instanceIds: string[]) => void;
   reset: () => void;
+  /** 删除实例时移除其切片（文件夹/文件/卡片/连线/标签）与撤销栈，随落盘同步丢弃 */
+  removeSlice: (instanceId: string) => void;
   getSlice: (instanceId: string) => LoreSlice;
   /** 载入某个文件；无文件时自动创建默认文件并选中 */
   ensureFile: (instanceId: string) => string | null;
@@ -186,6 +188,13 @@ export const useLoreStore = create<LoreState>((set, get) => ({
   },
 
   reset: () => set({ slices: {}, undoStacks: {}, redoStacks: {} }),
+
+  removeSlice: (instanceId) => {
+    const { [instanceId]: _gone, ...slices } = get().slices;
+    const { [instanceId]: _u, ...undoStacks } = get().undoStacks;
+    const { [instanceId]: _r, ...redoStacks } = get().redoStacks;
+    set({ slices, undoStacks, redoStacks });
+  },
 
   getSlice: (instanceId) => get().slices[instanceId] ?? EMPTY_LORE_SLICE,
 

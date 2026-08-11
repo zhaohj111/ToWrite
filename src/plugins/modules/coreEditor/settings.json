@@ -1,0 +1,23 @@
+{
+  "fontSize": {
+    "label": "字号",
+    "type": "number",
+    "default": 17,
+    "min": 12,
+    "max": 28,
+    "step": 1,
+    "instanceOverridable": true
+  },
+  "fileLabel": {
+    "label": "文件名",
+    "type": "string",
+    "default": "章节",
+    "instanceOverridable": true
+  },
+  "folderLabel": {
+    "label": "文件夹名",
+    "type": "string",
+    "default": "分卷",
+    "instanceOverridable": true
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "fileLabel": {
+    "label": "文件名",
+    "type": "string",
+    "default": "设定库文件",
+    "instanceOverridable": true
+  },
+  "folderLabel": {
+    "label": "文件夹名",
+    "type": "string",
+    "default": "文件夹",
+    "instanceOverridable": true
+  }
+}

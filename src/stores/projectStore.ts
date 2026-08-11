@@ -19,8 +19,11 @@ import { useEditorStore } from "@/stores/editorStore";
 import { useTimelineStore } from "@/stores/timelineStore";
 import { LORE_PROTOTYPE, useLoreStore } from "@/stores/loreStore";
 import { useLoreUiStore } from "@/stores/loreUiStore";
+import { useTimelineUiStore } from "@/stores/timelineUiStore";
+import { computeActivityItems, resolveDefaultView } from "@/plugins/hooks";
 import { useLayoutStore } from "@/stores/layoutStore";
 import { usePluginStore, EDITOR_PROTOTYPE, TIMELINE_PROTOTYPE } from "@/stores/pluginStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 export interface RecentItem {
   id: string;
@@ -45,6 +48,7 @@ interface ProjectState {
   openProjectById: (id: string) => Promise<void>;
   closeProject: () => void;
   markRecent: (meta: ProjectMeta) => Promise<void>;
+  removeRecent: (id: string) => Promise<void>;
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -144,6 +148,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       useWorkspaceStore.getState().openProject(data);
       // 应用工程级插件实例列表（含顺序/名称/启停/侧栏变体）；工程未存储时回退程序级模板
       usePluginStore.getState().applyProjectInstances(data.config?.instances);
+      // 载入工程级设置（实例覆盖，含旧 editorFontSizes 迁移）
+      useSettingsStore.getState().loadProjectSettings(data);
       const editorIds = usePluginStore
         .getState()
         .instances.filter((i) => i.enabled && i.prototypeId === EDITOR_PROTOTYPE)
@@ -159,8 +165,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         .instances.filter((i) => i.enabled && i.prototypeId === LORE_PROTOTYPE)
         .map((i) => i.id);
       useLoreStore.getState().loadProject(data, loreIds);
-      useLayoutStore.getState().setMainView("editor");
-      useLayoutStore.getState().setSidebar("editor");
+      // 工程级「当前使用颜色」恢复（时间轴/设定库，工程隔离）：从工程实例设置读取
+      restoreProjectColors(timelineIds, loreIds);
+      // 工程级默认插件（工程未存储时回退 editor）：主视图与侧边栏一并切换。
+      // 该插件实例无主视图/侧栏时，回退活动栏自上而下第一个带主视图/侧栏的实例。
+      const items = computeActivityItems(
+        usePluginStore.getState().instances,
+        useSettingsStore.getState().prototypeEnabled,
+      );
+      const { mainViewId, sidebarId } = resolveDefaultView(
+        items,
+        data.config?.mainView ?? "editor",
+      );
+      useLayoutStore.getState().setMainView(mainViewId ?? "editor");
+      useLayoutStore.getState().setSidebar(sidebarId);
       await get().markRecent(data.meta);
     } catch (e) {
       console.error("打开工程失败", e);
@@ -173,8 +191,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     useTimelineStore.getState().reset();
     useLoreStore.getState().reset();
     useLoreUiStore.getState().reset();
+    useTimelineUiStore.getState().reset();
     // 恢复程序级实例模板，避免上一工程的实例泄漏到下一工程/新工程
     usePluginStore.getState().restoreTemplate();
+    // 清空实例级设置覆盖（应用级设置保留）
+    useSettingsStore.getState().reset();
     useLayoutStore.getState().setSidebar(null);
   },
 
@@ -187,4 +208,40 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     await setSetting(RECENT_KEY, next);
     set({ recent: next });
   },
+
+  /** 从「最近打开」列表移除（不影响工程文件本身） */
+  removeRecent: async (id) => {
+    const next = get().recent.filter((r) => r.id !== id);
+    set({ recent: next });
+    await setSetting(RECENT_KEY, next);
+  },
 }));
+
+/**
+ * 从工程实例设置恢复时间轴「当前使用颜色」与设定库当前连线/关系文本颜色（工程隔离）。
+ * 颜色写入 settingsStore.instanceSettings（随 project-config.json 落盘），打开工程时读回 UI store。
+ */
+function restoreProjectColors(timelineIds: string[], loreIds: string[]): void {
+  const settings = useSettingsStore.getState();
+  const tlUi = useTimelineUiStore.getState();
+  const colors: Record<string, string> = {};
+  for (const id of timelineIds) {
+    const c = settings.getInstanceSetting(id, "currentColor");
+    if (typeof c === "string") colors[id] = c;
+  }
+  tlUi.loadProject(colors);
+
+  const loUi = useLoreUiStore.getState();
+  const loreColors: Record<string, { edgeColor?: string; edgeLabelColor?: string }> = {};
+  for (const id of loreIds) {
+    const ec = settings.getInstanceSetting(id, "edgeColor");
+    const elc = settings.getInstanceSetting(id, "edgeLabelColor");
+    if (typeof ec === "string" || typeof elc === "string") {
+      loreColors[id] = {
+        edgeColor: typeof ec === "string" ? ec : undefined,
+        edgeLabelColor: typeof elc === "string" ? elc : undefined,
+      };
+    }
+  }
+  loUi.loadProject(loreColors);
+}

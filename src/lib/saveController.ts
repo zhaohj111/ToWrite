@@ -7,6 +7,8 @@ import { useEditorStore } from "@/stores/editorStore";
 import { useTimelineStore } from "@/stores/timelineStore";
 import { LORE_PROTOTYPE, useLoreStore } from "@/stores/loreStore";
 import { usePluginStore, EDITOR_PROTOTYPE, TIMELINE_PROTOTYPE } from "@/stores/pluginStore";
+import { useSettingsStore } from "@/stores/settingsStore";
+import { useLayoutStore } from "@/stores/layoutStore";
 import type { EditorDoc, LoreDoc, ProjectData, TimelineDoc } from "@/types/writeproj";
 
 const DEBOUNCE_MS = 2000;
@@ -48,10 +50,11 @@ function collect(): ProjectData | null {
     editors,
     timelines,
     lore,
-    // 工程级布局/视图配置：插件实例列表（含顺序/名称/启停/侧栏变体）+ 各编辑器实例字号
+    // 工程级布局/视图配置：插件实例列表（含顺序/名称/启停/侧栏变体）+ 实例级设置覆盖 + 默认主视图
     config: {
       instances: usePluginStore.getState().instances,
-      editorFontSizes: useEditorStore.getState().fontSizes,
+      instanceSettings: useSettingsStore.getState().instanceSettings,
+      mainView: useLayoutStore.getState().mainViewId,
     },
   };
 }
@@ -81,8 +84,12 @@ function schedule() {
 export function startSaveController(): () => void {
   if (started) return () => undefined;
   started = true;
-  const stores = [useEditorStore, useTimelineStore, useLoreStore, usePluginStore];
+  const stores = [useEditorStore, useTimelineStore, useLoreStore, usePluginStore, useSettingsStore];
   const unsubs = stores.map((s) => s.subscribe(schedule));
+  // 主视图改为工程作用域：切换主视图时触发一次落盘，把 mainView 持久化到 project-config.json
+  const unsubLayout = useLayoutStore.subscribe((s, p) => {
+    if (s.mainViewId !== p.mainViewId) schedule();
+  });
   window.addEventListener("beforeunload", () => {
     if (timer) {
       clearTimeout(timer);
@@ -91,6 +98,7 @@ export function startSaveController(): () => void {
   });
   return () => {
     unsubs.forEach((u) => u());
+    unsubLayout();
     started = false;
   };
 }

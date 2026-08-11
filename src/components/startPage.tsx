@@ -9,6 +9,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  Settings,
   StickyNote,
   Trash2,
 } from "lucide-react";
@@ -31,6 +32,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { useProjectStore } from "@/stores/projectStore";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { UpdateBadge } from "@/components/updateBadge";
 import { cn } from "@/lib/cn";
 import type { ProjectMeta } from "@/types/writeproj";
 
@@ -181,6 +184,16 @@ export function StartPage() {
           </Button>
           <Button variant="secondary" onClick={() => void importProjectFile()}>
             <FolderOpen className="size-4" /> 打开工程文件
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            title="设置"
+            className="relative"
+            onClick={() => useWorkspaceStore.getState().openSettings()}
+          >
+            <Settings className="size-4" />
+            <UpdateBadge />
           </Button>
           <div className="min-w-4 flex-1" />
           {projectsDir && (

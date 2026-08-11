@@ -33,11 +33,10 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
 
   init: async () => {
     const zoom = await getSetting<number>("zoom", 100);
-    const mainViewId = await getSetting<string>("mainView", "editor");
     const sidebarWidth = await getSetting<number>("sidebarWidth", DEFAULT_SIDEBAR_WIDTH);
     set({
       zoom,
-      mainViewId,
+      // 默认主视图已移到工程作用域：无工程时为默认值，打开工程后按工程配置读取
       sidebarWidth: Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, sidebarWidth)),
     });
   },
@@ -55,9 +54,9 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     void setSetting("sidebarWidth", w);
   },
 
+  // 主视图改为工程作用域：仅更新内存态，随工程持久化（saveController 收集到 project-config.json）。
   setMainView: (id) => {
     set({ mainViewId: id });
-    void setSetting("mainView", id);
   },
 
   setZoom: (zoom) => {

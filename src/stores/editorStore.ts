@@ -1,8 +1,8 @@
 // 编辑器状态（core.editor）：分卷、章节列表与各章 TipTap JSON 内容。
 // v0.6：状态按插件实例隔离（正文 / 大纲…各自独立），slices 以实例 id 为键。
+// 字号经级联配置（实例覆盖 > 应用级 > manifest 默认）解析，见 stores/settingsStore.ts。
 
 import { create } from "zustand";
-import { getSetting } from "@/lib/settings";
 import type { ChapterDoc, ChapterMeta, ProjectData, VolumeMeta } from "@/types/writeproj";
 import { emptyChapterDoc } from "@/types/writeproj";
 
@@ -49,19 +49,17 @@ function withLeadingH1(doc: ChapterDoc, title: string): ChapterDoc {
   return { ...doc, content };
 }
 
-/** 默认字号（px）：新建实例未单独设置时的兜底 / 工具栏「重置」目标 */
+/** 默认字号（px）：manifest 出厂默认（core.editor.settings.fontSize 保持一致）/ 工具栏「重置」目标 */
 export const DEFAULT_FONT_SIZE = 17;
 
 interface EditorState {
   /** 按实例 id 隔离的编辑器状态 */
   slices: Record<string, EditorSlice>;
-  /** 各编辑器实例的字号（px，实例 id -> 字号），随工程配置（.writeproj）持久化；实例未设置时回退 defaultFontSize */
-  fontSizes: Record<string, number>;
-  /** 程序级默认字号（config 持久化）：新工程/未单独设置的实例的兜底 */
-  defaultFontSize: number;
-  /** 载入工程：为每个编辑器实例建立切片（data.editors 中无则空切片），并读取实例字号 */
+  /** 载入工程：为每个编辑器实例建立切片（data.editors 中无则空切片） */
   loadProject: (data: ProjectData, instanceIds: string[]) => void;
   reset: () => void;
+  /** 删除实例时移除其切片（分卷/章节/正文），随 .writeproj 落盘时同步丢弃 */
+  removeSlice: (instanceId: string) => void;
   getSlice: (instanceId: string) => EditorSlice;
   setCurrentChapter: (instanceId: string, id: string) => void;
   setContent: (instanceId: string, id: string, doc: ChapterDoc) => void;
@@ -79,17 +77,12 @@ interface EditorState {
     id: string,
     opts: { volumeId?: string; beforeId?: string },
   ) => void;
-  initFontSize: () => Promise<void>;
-  setFontSize: (instanceId: string, n: number) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
   slices: {},
-  fontSizes: {},
-  defaultFontSize: DEFAULT_FONT_SIZE,
 
   loadProject: (data, instanceIds) => {
-    const fontSizes = data.config?.editorFontSizes ?? {};
     const slices: Record<string, EditorSlice> = {};
     for (const id of instanceIds) {
       const doc = data.editors?.[id];
@@ -114,10 +107,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         slices[id] = { ...EMPTY_SLICE };
       }
     }
-    set({ slices, fontSizes });
+    set({ slices });
   },
 
-  reset: () => set({ slices: {}, fontSizes: {} }),
+  reset: () => set({ slices: {} }),
+
+  removeSlice: (instanceId) => {
+    const { [instanceId]: _gone, ...slices } = get().slices;
+    set({ slices });
+  },
 
   getSlice: (instanceId) => get().slices[instanceId] ?? EMPTY_SLICE,
 
@@ -319,15 +317,5 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({
       slices: { ...get().slices, [instanceId]: { ...cur, chapters } },
     });
-  },
-
-  initFontSize: async () => {
-    const defaultFontSize = await getSetting<number>("editorFontSize", DEFAULT_FONT_SIZE);
-    set({ defaultFontSize });
-  },
-
-  // 仅写入实例字号：经 saveController 随工程配置防抖落盘，不再写程序级默认字号
-  setFontSize: (instanceId, fontSize) => {
-    set((s) => ({ fontSizes: { ...s.fontSizes, [instanceId]: fontSize } }));
   },
 }));

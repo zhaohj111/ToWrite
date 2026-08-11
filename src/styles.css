@@ -101,6 +101,22 @@
   --grain-opacity: 0.025;
   --ambient-opacity: 0.5;
 }
+
+/* ============================================================
+   设置界面纸白底（仅浅色模式）：以编辑区纸面 #fdf9f0 为唯一底色，
+   面板/输入/选择器底色与背景完全一致，只靠轮廓（line 系列）与
+   朱砂红选中态区分，去除一切色差与黄褐/棕褐观感。
+   悬停保留一层浅暖白（可感知的悬浮反馈）。深色模式保持墨夜配色。
+   ============================================================ */
+:root:not(.dark) .settings-surface {
+  --color-panel: #fdf9f0;      /* 页面底色：主题纸白 */
+  --color-panel-2: #fdf9f0;    /* 组件底色与背景一致，仅靠轮廓区分 */
+  --color-panel-3: #fdf9f0;    /* 输入/选择器底色与背景一致，仅靠轮廓区分 */
+  --color-hover: #f4ede0;      /* 悬停：浅暖白（保留可感知的悬浮反馈） */
+  --color-active: #fdf9f0;     /* 与背景一致（选中色由具体组件用朱砂红） */
+  --color-line: #ece5d5;       /* 分隔线/轮廓 */
+  --color-line-strong: #d8ceb8;/* 强调轮廓 */
+}
 .dark {
   --grain-opacity: 0.05;
   --ambient-opacity: 1;
@@ -289,6 +305,10 @@ textarea,
   from { opacity: 0; transform: translateX(6px); }
   to { opacity: 1; transform: translateX(0); }
 }
+@keyframes drawer-in {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
 @keyframes num-in {
   from { opacity: 0; transform: translateY(2px); }
   to { opacity: 1; transform: translateY(0); }
@@ -326,6 +346,7 @@ textarea,
 .anim-rise { animation: rise 0.6s var(--ease-out-expo) both; }
 .anim-fade { animation: fade-in 0.4s ease both; }
 .anim-scale { animation: scale-in 0.35s var(--ease-spring) both; }
+.anim-drawer { animation: drawer-in 0.3s var(--ease-out-expo) both; }
 .anim-page { animation: page-in 0.42s var(--ease-out-expo) both; }
 .anim-tab { animation: tab-in 0.22s var(--ease-out-expo) both; }
 .anim-num { animation: num-in 0.16s var(--ease-out-expo) both; }
@@ -352,6 +373,14 @@ select {
   transition-property: background-color, border-color, color, opacity, transform, box-shadow;
   transition-duration: 0.18s;
   transition-timing-function: var(--ease-standard);
+}
+
+/* 移除浏览器默认聚焦环（深色描边）。
+   原因：自定义聚焦态统一由 focus:border-accent/40 等提供（outline 仅作清除）。
+   键盘操作后 Chromium 会进入“键盘模态”，随后鼠标点击也可能匹配 :focus-visible，
+   导致部分输入框/选择器“偶尔闪现黑色聚焦、再点几次才消失”。全局抑制即可根除。 */
+:focus-visible {
+  outline: none;
 }
 
 /* ================================================================

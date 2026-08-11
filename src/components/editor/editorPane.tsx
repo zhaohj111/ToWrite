@@ -7,7 +7,9 @@ import { useEffect, useRef, type CSSProperties } from "react";
 import { Toolbar } from "@/components/editor/toolbar";
 import { EditorProvider } from "@/components/editor/editorContext";
 import { useEditorInstance, useEditorSlice } from "@/components/editor/editorInstanceContext";
-import { useEditorStore } from "@/stores/editorStore";
+import { useEditorStore, DEFAULT_FONT_SIZE } from "@/stores/editorStore";
+import { EDITOR_PROTOTYPE } from "@/stores/pluginStore";
+import { useSettingsStore, resolveSetting } from "@/stores/settingsStore";
 import { setActiveEditor } from "@/lib/editorBus";
 import { emptyChapterDoc } from "@/types/writeproj";
 
@@ -15,10 +17,9 @@ export function EditorPane() {
   const instanceId = useEditorInstance();
   const slice = useEditorSlice();
   const { currentChapterId: currentId, contents, chapters } = slice;
-  // 字号按实例隔离：实例未单独设置时回退程序级默认字号
-  const fontSizes = useEditorStore((s) => s.fontSizes);
-  const defaultFontSize = useEditorStore((s) => s.defaultFontSize);
-  const fontSize = fontSizes[instanceId] ?? defaultFontSize;
+  // 字号按实例隔离（级联：实例覆盖 > 应用级 > manifest 默认）；订阅 settingsStore 以响应设置页改动
+  useSettingsStore();
+  const fontSize = (resolveSetting(EDITOR_PROTOTYPE, instanceId, "fontSize") as number) ?? DEFAULT_FONT_SIZE;
   const prevIdRef = useRef<string | null>(null);
 
   const editor = useEditor({

@@ -15,24 +15,30 @@ import {
   Strikethrough,
   Undo2,
 } from "lucide-react";
-import type { ModuleContract } from "@/types/plugin";
+import type { ModuleContract, SettingFieldDef } from "@/types/plugin";
+// 内容解耦：详情 / 更新日志为 .md，设置字段为 .json，代码仅做引用关联（同目录独立插件文件夹）
+import editorReadme from "./README.md?raw";
+import editorChangelog from "./CHANGELOG.md?raw";
+import editorSettings from "./settings.json";
 import { EditorPane } from "@/components/editor/editorPane";
 import { ChapterSidebar } from "@/components/editor/chapterSidebar";
-import { OutlineSidebar } from "@/components/editor/outlineSidebar";
 
 export const coreEditorModule: ModuleContract = {
   id: "core.editor",
-  name: "正文编辑器",
+  name: "编辑器",
   description: "官方重型模块：章节正文编辑，冻结 chapters/ 的 TipTap JSON 格式。",
+  readme: editorReadme,
+  changelogMd: editorChangelog,
   kind: "heavy",
   enabled: true,
+  author: "拓文官方",
+  version: "0.6.0",
+  // 设置字段声明与出厂默认（级联第 ③ 层）在 settings.json
+  settings: editorSettings as unknown as Record<string, SettingFieldDef>,
   views: {
     activityBar: { id: "editor", label: "正文", icon: FileText },
-    // 两个侧边栏变体：正文实例选 chapters（章节树），大纲实例选 outline（标题大纲）
-    sidebars: [
-      { id: "chapters", title: "章节", component: ChapterSidebar },
-      { id: "outline", title: "大纲", component: OutlineSidebar },
-    ],
+    // 侧栏仅保留「章节」变体；大纲已并入章节侧栏（章节树 / 大纲 视图切换，功能保留）
+    sidebars: [{ id: "chapters", title: "章节", component: ChapterSidebar }],
     mainView: { id: "editor", title: "正文", component: EditorPane },
   },
   activate: (ctx) => {
@@ -166,7 +172,7 @@ export const coreEditorModule: ModuleContract = {
     // ---- i18n.resources / theme 贡献点（骨架）----
     ctx.registerContribution("i18n.resources", {
       locale: "zh-CN",
-      resources: { "app.name": "拓文 / ToWrite", "app.version": "0.5.0" },
+      resources: { "app.name": "拓文 / ToWrite", "app.version": "0.6.0" },
     });
     ctx.registerContribution("theme", {
       id: "ink",

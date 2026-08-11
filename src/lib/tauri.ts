@@ -43,3 +43,36 @@ export function getProjectsDir(): Promise<string> {
 export function importProject(path: string): Promise<ProjectMeta> {
   return invoke<ProjectMeta>("import_project", { path });
 }
+
+export function migrateData(target: string): Promise<string> {
+  return invoke<string>("migrate_data", { target });
+}
+
+/** C 盘应用数据目录（地址指针存放位置） */
+export function getDataPointerDir(): Promise<string> {
+  return invoke<string>("data_pointer_dir");
+}
+
+/** 更新检查结果（对应 Rust updater::UpdateInfo，camelCase） */
+export interface UpdateInfo {
+  updateAvailable: boolean;
+  currentVersion: string;
+  latestVersion: string;
+  releaseNotes: string | null;
+  downloadUrl: string | null;
+}
+
+/** 检查 GitHub 最新 release 是否有新版本 */
+export function checkUpdate(): Promise<UpdateInfo> {
+  return invoke<UpdateInfo>("check_update");
+}
+
+/** 下载最新安装包（Rust 侧自行解析 release 与资产，完成后打开）；返回下载到的文件路径 */
+export function downloadUpdate(): Promise<string> {
+  return invoke<string>("download_update");
+}
+
+/** 从 GitHub 默认分支拉取仓库根目录 CHANGELOG.md 原文（检查更新时刷新更新日志页） */
+export function fetchChangelog(): Promise<string> {
+  return invoke<string>("fetch_changelog");
+}

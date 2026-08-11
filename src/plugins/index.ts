@@ -5,7 +5,13 @@ import { registerCoreModules } from "@/plugins/registry";
 import { coreEditorModule } from "@/plugins/modules/coreEditor";
 import { coreLoreModule } from "@/plugins/modules/coreLore";
 import { coreTimelineModule } from "@/plugins/modules/coreTimeline";
+import { coreConfigModule } from "@/plugins/modules/coreConfig";
 
 export function initPlugins(): void {
-  registerCoreModules(coreEditorModule, coreLoreModule, coreTimelineModule);
+  registerCoreModules(
+    coreConfigModule,
+    coreEditorModule,
+    coreLoreModule,
+    coreTimelineModule,
+  );
 }
