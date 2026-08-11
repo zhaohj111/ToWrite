@@ -186,8 +186,10 @@ export function ActivityBar() {
         className="group relative flex h-12 w-full items-center justify-center border-t border-line/60 text-fg-muted transition-all duration-200 hover:text-accent"
         onClick={() => useWorkspaceStore.getState().openSettings()}
       >
-        <Settings className="size-5 transition-transform duration-200 group-hover:rotate-45 group-hover:scale-110" />
-        <UpdateBadge />
+        <span className="relative inline-flex">
+          <Settings className="size-5 transition-transform duration-200 group-hover:rotate-45 group-hover:scale-110" />
+          <UpdateBadge />
+        </span>
       </button>
     </div>
   );

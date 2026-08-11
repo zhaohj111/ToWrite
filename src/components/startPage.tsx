@@ -189,11 +189,12 @@ export function StartPage() {
             variant="ghost"
             size="icon"
             title="设置"
-            className="relative"
             onClick={() => useWorkspaceStore.getState().openSettings()}
           >
-            <Settings className="size-4" />
-            <UpdateBadge />
+            <span className="relative inline-flex">
+              <Settings className="size-4" />
+              <UpdateBadge />
+            </span>
           </Button>
           <div className="min-w-4 flex-1" />
           {projectsDir && (
