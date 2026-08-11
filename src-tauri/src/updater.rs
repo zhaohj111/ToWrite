@@ -110,8 +110,47 @@ async fn fetch_release(client: &reqwest::Client, current: &str) -> Result<Github
     resp.json::<GithubRelease>().await.map_err(|e| e.to_string())
 }
 
-/// 安装包资产：优先 .exe，其次 .msi
+/// 当前安装方式（Windows）：在卸载注册表中按 DisplayName 找到 ToWrite，
+/// 有 WindowsInstaller=1 标志即为 MSI，否则为 NSIS。非 Windows / 找不到返回 None。
+#[cfg(windows)]
+fn installed_format() -> Option<&'static str> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ};
+    use winreg::RegKey;
+    const UNINSTALL: &str = r"Software\Microsoft\Windows\CurrentVersion\Uninstall";
+    for hive in [HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER] {
+        let Ok(key) = RegKey::predef(hive).open_subkey_with_flags(UNINSTALL, KEY_READ) else {
+            continue;
+        };
+        for sub in key.enum_keys().flatten() {
+            let Ok(sk) = key.open_subkey_with_flags(&sub, KEY_READ) else { continue };
+            let Ok(name) = sk.get_value::<String, _>("DisplayName") else { continue };
+            if !(name.contains("ToWrite") || name.contains("拓文")) {
+                continue;
+            }
+            let is_msi = sk
+                .get_value::<u32, _>("WindowsInstaller")
+                .map(|v| v == 1)
+                .unwrap_or(false);
+            return Some(if is_msi { "msi" } else { "exe" });
+        }
+    }
+    None
+}
+
+#[cfg(not(windows))]
+fn installed_format() -> Option<&'static str> {
+    None
+}
+
+/// 安装包资产：优先与当前安装方式匹配（MSI 装→下 msi，NSIS 装→下 exe），
+/// 避免跨格式升级触发「先卸载再装」弹窗；无法判定或缺少对应格式时回退 .exe，其次 .msi。
 fn pick_asset(release: &GithubRelease) -> Option<&GithubAsset> {
+    if let Some(ext) = installed_format() {
+        let suffix = format!(".{ext}");
+        if let Some(a) = release.assets.iter().find(|a| a.name.ends_with(&suffix)) {
+            return Some(a);
+        }
+    }
     release
         .assets
         .iter()
@@ -216,20 +255,25 @@ pub async fn download_update(app: AppHandle) -> Result<String, String> {
     }
     let total = resp.content_length();
 
-    let mut file = fs::File::create(&part_path).map_err(|e| e.to_string())?;
     let mut downloaded = 0u64;
-    loop {
-        let chunk = resp.chunk().await.map_err(|e| {
-            let _ = fs::remove_file(&part_path);
-            e.to_string()
-        })?;
-        let Some(chunk) = chunk else { break };
-        file.write_all(&chunk).map_err(|e| {
-            let _ = fs::remove_file(&part_path);
-            e.to_string()
-        })?;
-        downloaded += chunk.len() as u64;
-        let _ = app.emit("update://progress", &DownloadProgress { downloaded, total });
+    // 写文件放在独立作用域块里：块结束即关闭句柄（drop）。
+    // 不关闭句柄就去 rename / 打开安装包，Windows 会弹「另一个程序正在使用此文件」，
+    // 且 exe 不会真正启动（ShellExecute 已放弃）。File 无用户态缓冲，drop 即释放。
+    {
+        let mut file = fs::File::create(&part_path).map_err(|e| e.to_string())?;
+        loop {
+            let chunk = resp.chunk().await.map_err(|e| {
+                let _ = fs::remove_file(&part_path);
+                e.to_string()
+            })?;
+            let Some(chunk) = chunk else { break };
+            file.write_all(&chunk).map_err(|e| {
+                let _ = fs::remove_file(&part_path);
+                e.to_string()
+            })?;
+            downloaded += chunk.len() as u64;
+            let _ = app.emit("update://progress", &DownloadProgress { downloaded, total });
+        }
     }
 
     fs::rename(&part_path, &final_path).map_err(|e| {
@@ -237,11 +281,20 @@ pub async fn download_update(app: AppHandle) -> Result<String, String> {
         e.to_string()
     })?;
 
-    // 打开安装包；失败不阻断（文件已下载）
+    // 打开安装包；失败不阻断（文件已下载），且失败时不自动退出应用
     let path_str = final_path.to_string_lossy().into_owned();
-    let _ = app
-        .opener()
-        .open_path(&path_str, None::<&str>)
-        .map_err(|e| eprintln!("打开安装包失败：{e}"));
+    match app.opener().open_path(&path_str, None::<&str>) {
+        Ok(()) => {
+            // 安装包已启动：短暂延迟后自动退出应用，让安装程序独占更新，
+            // 否则安装时（尤其跨格式先卸载）会弹「应用未关闭」。open_path 经
+            // ShellExecute 启动的安装程序独立于本进程，应用退出不影响其继续安装。
+            let app = app.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(2000));
+                app.exit(0);
+            });
+        }
+        Err(e) => eprintln!("打开安装包失败：{e}"),
+    }
     Ok(path_str)
 }

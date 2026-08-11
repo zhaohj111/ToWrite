@@ -28,5 +28,9 @@ chrono = { version = "0.4", features = ["serde"] }
 # 不用 0.13 默认（rustls/aws-lc-rs，Windows 需 CMake+NASM）。chunk() 流式下载，无需 stream/futures-util。
 reqwest = { version = "0.13", default-features = false, features = ["json", "native-tls"] }
 
+[target.'cfg(windows)'.dependencies]
+# 读取卸载注册表区分 MSI / NSIS 安装方式，决定更新下载 exe 还是 msi（仅 Windows）
+winreg = "0.52"
+
 [profile.dev]
 incremental = true

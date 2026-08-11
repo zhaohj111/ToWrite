@@ -102,7 +102,7 @@ export function UpdateControl() {
 
       {phase === "downloaded" && (
         <p className="flex items-center gap-1.5 text-[13px] text-fg-muted">
-          <CheckCircle2 className="size-3.5 text-accent" /> 已下载，正在打开安装包…
+          <CheckCircle2 className="size-3.5 text-accent" /> 已下载，正在打开安装包；应用将自动关闭以完成更新…
         </p>
       )}
 
