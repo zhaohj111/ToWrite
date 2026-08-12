@@ -196,7 +196,7 @@ export const coreConfigModule: ModuleContract = {
         {
           id: "version",
           title: "版本与更新",
-          description: "当前版本、检查更新（GitHub Releases）与启动时自动检查开关；下载时显示进度。",
+          description: "当前版本、检查更新（GitHub Releases）与更新下载（仅支持最新版本下载，若需旧版本请自行前往 GitHub Releases 页面下载）。",
           keywords: ["版本", "version", "更新", "检查更新", "升级", "自动检查", "关于"],
           scope: "app",
           path: "关于 > 关于应用",
@@ -206,7 +206,7 @@ export const coreConfigModule: ModuleContract = {
         {
           id: "author",
           title: "作者",
-          description: "拓文（ToWrite）的开发者（GitHub：zhaohj111）。",
+          description: "拓文（ToWrite）的开发者。",
           keywords: ["作者", "author", "开发者", "署名", "GitHub", "关于"],
           scope: "app",
           path: "关于 > 关于应用",

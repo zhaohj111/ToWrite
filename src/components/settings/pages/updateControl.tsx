@@ -36,22 +36,22 @@ export function UpdateControl() {
 
   return (
     <div className="flex w-full flex-col gap-4">
-      {/* 当前版本 + 自动检查开关 */}
+      {/* 当前版本 + 检查动作 + 自动检查开关 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="font-mono text-[15px] text-fg">{version}</span>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[15px] text-fg">{version}</span>
+          <Button size="sm" variant="secondary" onClick={() => void checkNow()} disabled={busy}>
+            <RefreshCw className={cn("size-3.5", phase === "checking" && "animate-spin")} />
+            {phase === "checking" ? "正在检查…" : "检查更新"}
+          </Button>
+        </div>
         <label className="flex items-center gap-2 text-[13px] text-fg-muted">
           启动时自动检查更新
           <SettingToggle checked={autoCheck} onChange={setAutoCheck} />
         </label>
       </div>
 
-      {/* 检查动作 */}
-      <div className="flex items-center gap-2">
-        <Button size="sm" variant="secondary" onClick={() => void checkNow()} disabled={busy}>
-          <RefreshCw className={cn("size-3.5", phase === "checking" && "animate-spin")} />
-          {phase === "checking" ? "正在检查…" : "检查更新"}
-        </Button>
-      </div>
+      
 
       {/* 结果 / 下载进度 */}
       {phase === "up-to-date" && (
@@ -72,7 +72,7 @@ export function UpdateControl() {
           </div>
           {downloadUrl == null && (
             <p className="text-xs text-fg-muted">
-              该版本未提供 Windows 安装包，暂无法自动下载。
+              该版本未提供安装包，暂无法自动下载。
             </p>
           )}
           {notes && (
