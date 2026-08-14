@@ -1,6 +1,6 @@
 [package]
 name = "towrite"
-version = "0.6.0"
+version = "0.6.4"
 description = "拓文 / ToWrite - AI 协作文学写作工具"
 # authors 用于 .deb 包的 Maintainer 字段（要求"姓名 <邮箱>"格式；改用 zhaohj111 的 GitHub noreply 邮箱）
 authors = ["ToWrite <zhaohj111@users.noreply.github.com>"]
@@ -27,6 +27,12 @@ chrono = { version = "0.4", features = ["serde"] }
 # 更新检查：GitHub Releases API + 安装包下载。native-tls（Windows 走 schannel，零额外工具链）；
 # 不用 0.13 默认（rustls/aws-lc-rs，Windows 需 CMake+NASM）。chunk() 流式下载，无需 stream/futures-util。
 reqwest = { version = "0.13", default-features = false, features = ["json", "native-tls"] }
+# 文本/图片型 PDF 导出（0.8.x：ParsedFont::from_bytes + doc.add_font，TTC 字体集合按索引取字面）。
+# 需显式开启 png feature：图片型 PDF 由前端 html-to-image 渲染成 PNG，Rust 侧 RawImage::decode_from_bytes
+# 依赖 image/png 解码，默认 features 只有 html，未开 png 会直接报「missing feature 'png'」导致导出静默失败。
+printpdf = { version = "0.8", features = ["png"] }
+# 二进制文件读写（导入 PDF/DOCX/EPUB、导出 PNG）以 base64 字符串在前后端间传递
+base64 = "0.22"
 
 [target.'cfg(windows)'.dependencies]
 # 读取卸载注册表区分 MSI / NSIS 安装方式，决定更新下载 exe 还是 msi（仅 Windows）

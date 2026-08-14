@@ -1,5 +1,6 @@
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import * as React from "react";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export const DropdownMenu = DropdownMenuPrimitive.Root;
@@ -37,6 +38,43 @@ export const DropdownMenuItem = React.forwardRef<
   />
 ));
 DropdownMenuItem.displayName = "DropdownMenuItem";
+
+export const DropdownMenuSub = DropdownMenuPrimitive.Sub;
+export const DropdownMenuSubTrigger = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.SubTrigger>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger>
+>(({ className, children, ...props }, ref) => (
+  <DropdownMenuPrimitive.SubTrigger
+    ref={ref}
+    className={cn(
+      "relative flex cursor-default select-none items-center gap-2 rounded-lg px-2.5 py-2 text-sm outline-none transition-colors data-[highlighted]:bg-accent/10 data-[highlighted]:text-accent data-[state=open]:bg-accent/10 data-[state=open]:text-accent",
+      className,
+    )}
+    {...props}
+  >
+    {children}
+    <ChevronRight className="ml-auto size-3.5 opacity-60" />
+  </DropdownMenuPrimitive.SubTrigger>
+));
+DropdownMenuSubTrigger.displayName = "DropdownMenuSubTrigger";
+
+export const DropdownMenuSubContent = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.SubContent>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>
+>(({ className, ...props }, ref) => (
+  // Portal 到 body：二级弹窗渲染在顶层，避免被一级菜单的 overflow-hidden 裁剪
+  <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPrimitive.SubContent
+      ref={ref}
+      className={cn(
+        "glass anim-scale z-50 min-w-[9rem] overflow-hidden rounded-xl p-2 text-fg ring-1 ring-line/60 shadow-pop",
+        className,
+      )}
+      {...props}
+    />
+  </DropdownMenuPrimitive.Portal>
+));
+DropdownMenuSubContent.displayName = "DropdownMenuSubContent";
 
 export const DropdownMenuLabel = DropdownMenuPrimitive.Label;
 export const DropdownMenuSeparator = React.forwardRef<

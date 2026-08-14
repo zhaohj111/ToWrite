@@ -222,3 +222,95 @@ pub fn data_pointer_dir(app: AppHandle) -> Result<String, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     Ok(dir.to_string_lossy().to_string())
 }
+
+// ===================== 文件 I/O（导入导出用） =====================
+
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
+
+/// 读取 UTF-8 文本文件（Markdown/TXT/.timeline/.lore 导入）。
+#[tauri::command]
+pub fn read_text_file(path: String) -> Result<String, String> {
+    fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+/// 读取二进制文件并返回 base64（PDF/DOCX/DOC/EPUB 导入、图片插入）。
+#[tauri::command]
+pub fn read_binary_file(path: String) -> Result<String, String> {
+    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+    Ok(BASE64.encode(bytes))
+}
+
+/// 写文本文件（TXT/Markdown/.timeline/.lore 导出）；自动创建父目录。
+#[tauri::command]
+pub fn write_text_file(path: String, content: String) -> Result<(), String> {
+    write_file_ensure_parent(&Path::new(&path), |p| fs::write(p, content))
+}
+
+/// 写二进制文件（PNG 导出；入参为 base64）；自动创建父目录。
+#[tauri::command]
+pub fn write_binary_file(path: String, base64: String) -> Result<(), String> {
+    let bytes = BASE64.decode(&base64).map_err(|e| e.to_string())?;
+    write_file_ensure_parent(&Path::new(&path), |p| fs::write(p, bytes))
+}
+
+fn write_file_ensure_parent<F>(path: &Path, write: F) -> Result<(), String>
+where
+    F: FnOnce(&Path) -> std::io::Result<()>,
+{
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    write(path).map_err(|e| e.to_string())
+}
+
+/// 导入支持的扩展名（与前端 fileFormats 常量保持一致）
+const IMPORT_EXTENSIONS: &[&str] = &["pdf", "md", "txt", "doc", "docx", "epub"];
+
+/// 单个待导入文件信息（前端「导入文件夹为工程」用）
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportFileInfo {
+    pub path: String,
+    pub name: String,
+}
+
+/// 递归列出目录下受支持扩展名的文件（按路径排序，保证章节顺序稳定）。
+#[tauri::command]
+pub fn list_import_files(dir: String) -> Result<Vec<ImportFileInfo>, String> {
+    let root = PathBuf::from(&dir);
+    if !root.is_dir() {
+        return Err("目录不存在".to_string());
+    }
+    let mut out: Vec<ImportFileInfo> = Vec::new();
+    let mut stack = vec![root];
+    while let Some(d) = stack.pop() {
+        let entries = fs::read_dir(&d).map_err(|e| e.to_string())?;
+        for entry in entries {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let p = entry.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else {
+                let ext = p
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|s| s.to_ascii_lowercase());
+                if let Some(ext) = ext {
+                    if IMPORT_EXTENSIONS.contains(&ext.as_str()) {
+                        let name = p
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_default();
+                        out.push(ImportFileInfo {
+                            path: p.to_string_lossy().to_string(),
+                            name,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(out)
+}

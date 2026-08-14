@@ -492,6 +492,59 @@ select {
 }
 
 /* ================================================================
+   TipTap 表格（core.editor 0.7）：border 即表格线，选中单元格高亮朱砂红
+   ================================================================ */
+.ProseMirror .tableWrapper {
+  overflow-x: auto;
+  margin: 0.6em 0;
+}
+.ProseMirror table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+.ProseMirror td,
+.ProseMirror th {
+  position: relative;
+  min-width: 1em;
+  border: 1px solid var(--color-line-strong);
+  padding: 0.45em 0.7em;
+  vertical-align: top;
+  box-sizing: border-box;
+}
+.ProseMirror th {
+  font-weight: 700;
+  text-align: left;
+  background: var(--color-panel-2);
+  color: var(--color-fg-strong);
+}
+.ProseMirror .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  pointer-events: none;
+}
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  /* 上下各 -1px 覆盖行间 1px 边框，让逐行渲染的手柄连成一条连续的竖线，
+     避免「每行分离」且标题行/正文行高度不一致时看起来像分段的选中高亮 */
+  top: -1px;
+  bottom: -1px;
+  width: 4px;
+  z-index: 20;
+  background-color: color-mix(in srgb, var(--color-accent) 70%, transparent);
+  pointer-events: none;
+}
+.ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+
+/* ================================================================
    React Flow 主题适配（!important 仅提权重，var() 运行时随主题）
    ================================================================ */
 
@@ -541,4 +594,21 @@ select {
 /* 节点入场（仅挂载时淡入一次，不碰 transform，避免与定位冲突） */
 .react-flow__node {
   animation: node-in 0.25s var(--ease-out-expo) both;
+}
+
+/* ================================================================
+   窗口顶部结果提示（Toast）：从上方滑入 + 淡入
+   ================================================================ */
+.toast-item {
+  animation: toast-in 0.28s var(--ease-out-expo);
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }

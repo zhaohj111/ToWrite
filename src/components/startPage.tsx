@@ -75,6 +75,8 @@ export function StartPage() {
   const renameProject = useProjectStore((s) => s.renameProject);
   const setProjectNote = useProjectStore((s) => s.setProjectNote);
   const importProjectFile = useProjectStore((s) => s.importProjectFile);
+  const importFileAsProject = useProjectStore((s) => s.importFileAsProject);
+  const importFolderAsProject = useProjectStore((s) => s.importFolderAsProject);
   const openProjectById = useProjectStore((s) => s.openProjectById);
 
   const [dlg, setDlg] = useState<DialogState | null>(null);
@@ -185,6 +187,25 @@ export function StartPage() {
           <Button variant="secondary" onClick={() => void importProjectFile()}>
             <FolderOpen className="size-4" /> 打开工程文件
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="secondary">
+                <FilePlus2 className="size-4" /> 导入
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="bottom">
+              <DropdownMenuItem onSelect={() => void importFileAsProject()}>
+                <FileText className="size-3.5 opacity-70" />
+                <span className="flex-1">导入文件为工程…</span>
+                <span className="text-[10px] text-fg-muted/60">PDF · Markdown · TXT · Word · EPUB</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void importFolderAsProject()}>
+                <FolderOpen className="size-3.5 opacity-70" />
+                <span className="flex-1">导入文件夹为工程…</span>
+                <span className="text-[10px] text-fg-muted/60">每个文档生成一章</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="ghost"
             size="icon"

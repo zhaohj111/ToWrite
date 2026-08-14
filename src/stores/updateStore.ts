@@ -7,6 +7,7 @@ import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
 import { checkUpdate, downloadUpdate, fetchChangelog, isTauri } from "@/lib/tauri";
 import { getSetting, setSetting } from "@/lib/settings";
+import { notifyError, notifySuccess } from "@/lib/notify";
 
 const KEY_AUTO_CHECK = "updateAutoCheck";
 
@@ -121,10 +122,15 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     if (!get().available || !isTauri()) return;
     set({ phase: "downloading", progress: { downloaded: 0, total: null }, lastError: null });
     try {
-      await downloadUpdate();
+      const path = await downloadUpdate();
       set({ phase: "downloaded", progress: null });
+      // 窗口顶部结果提示（导出同款样式）：下载完成 + 路径（可一键在文件夹中显示）；
+      // Rust 侧随后会打开安装程序，应用可能随之退出，提示保持简短。
+      notifySuccess("更新包下载完成", "安装程序即将启动，应用关闭后请按提示完成更新", path);
     } catch (e) {
-      set({ phase: "download-error", lastError: e instanceof Error ? e.message : String(e) });
+      const msg = e instanceof Error ? e.message : String(e);
+      set({ phase: "download-error", lastError: msg });
+      notifyError("更新包下载失败", msg);
     }
   },
 }));

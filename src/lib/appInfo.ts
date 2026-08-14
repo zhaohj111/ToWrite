@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { isTauri } from "@/lib/tauri";
 
 /** 浏览器开发环境（非 Tauri）的版本回退值 */
-export const DEV_APP_VERSION = "0.6.0";
+export const DEV_APP_VERSION = "0.6.4";
 
 /** 异步取应用版本；Tauri 下读二进制版本，浏览器开发回退常量 */
 export async function getAppVersion(): Promise<string> {

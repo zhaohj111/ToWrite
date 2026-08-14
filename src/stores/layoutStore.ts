@@ -35,7 +35,8 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     const zoom = await getSetting<number>("zoom", 100);
     const sidebarWidth = await getSetting<number>("sidebarWidth", DEFAULT_SIDEBAR_WIDTH);
     set({
-      zoom,
+      // 界面缩放默认 100%：存储值不在预设档位（90/100/120/150）时回退默认 100
+      zoom: ZOOM_LEVELS.includes(zoom) ? zoom : 100,
       // 默认主视图已移到工程作用域：无工程时为默认值，打开工程后按工程配置读取
       sidebarWidth: Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, sidebarWidth)),
     });

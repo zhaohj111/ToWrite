@@ -87,6 +87,8 @@ interface TimelineState {
   addFile: (instanceId: string, title: string, folderId?: string) => TimelineFileMeta;
   renameFile: (instanceId: string, id: string, title: string) => void;
   deleteFile: (instanceId: string, id: string) => void;
+  /** 整文件替换轴体数据（v0.7 导入 .timeline 用） */
+  setFileDoc: (instanceId: string, fileId: string, data: TimelineData) => void;
   moveFolder: (instanceId: string, id: string, beforeId: string | null) => void;
   moveFile: (
     instanceId: string,
@@ -334,6 +336,20 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
           docs,
           currentFileId: current,
           openTabs: current ? pushTab(tabs, current) : tabs,
+        },
+      },
+    });
+  },
+
+  setFileDoc: (instanceId, fileId, data) => {
+    const cur = get().slices[instanceId] ?? EMPTY_TIMELINE_SLICE;
+    if (!cur.docs[fileId]) return;
+    set({
+      slices: {
+        ...get().slices,
+        [instanceId]: {
+          ...cur,
+          docs: { ...cur.docs, [fileId]: normalizeDoc(data) },
         },
       },
     });

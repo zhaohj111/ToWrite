@@ -149,6 +149,8 @@ interface LoreState {
   addTag: (instanceId: string, name: string, color: string) => LoreTag;
   renameTag: (instanceId: string, id: string, name: string) => void;
   deleteTag: (instanceId: string, id: string) => void;
+  /** 导入时整体覆写某个文件的卡片/关系边数据（不触发结构撤销） */
+  setFileData: (instanceId: string, fileId: string, data: LoreData) => void;
   /** 收集单个实例的完整文档（供保存控制器落盘） */
   collectDoc: (instanceId: string) => LoreDoc;
   /** 在结构性变更（增删卡片/连线/标签、文件/分卷）前调用，记录撤销快照 */
@@ -314,6 +316,19 @@ export const useLoreStore = create<LoreState>((set, get) => ({
       },
     });
     return file;
+  },
+
+  setFileData: (instanceId, fileId, data) => {
+    const cur = get().slices[instanceId] ?? EMPTY_LORE_SLICE;
+    set({
+      slices: {
+        ...get().slices,
+        [instanceId]: {
+          ...cur,
+          docs: { ...cur.docs, [fileId]: normalizeLoreData(data) },
+        },
+      },
+    });
   },
 
   renameFile: (instanceId, id, title) => {

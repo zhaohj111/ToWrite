@@ -19,5 +19,59 @@
     "type": "string",
     "default": "分卷",
     "instanceOverridable": true
+  },
+  "toolbarText": {
+    "label": "工具栏 · 文字（加粗/斜体/删除线）",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarHeading": {
+    "label": "工具栏 · 标题（标题 1/2/3）",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarList": {
+    "label": "工具栏 · 列表（无序/有序）",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarQuote": {
+    "label": "工具栏 · 引用",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarCode": {
+    "label": "工具栏 · 代码块",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarHistory": {
+    "label": "工具栏 · 撤销/重做",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarImage": {
+    "label": "工具栏 · 插入图片",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarTable": {
+    "label": "工具栏 · 插入表格",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarIO": {
+    "label": "工具栏 · 导入/导出",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
   }
 }

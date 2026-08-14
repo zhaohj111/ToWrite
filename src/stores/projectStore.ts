@@ -2,17 +2,23 @@
 
 import { create } from "zustand";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { ProjectMeta } from "@/types/writeproj";
+import type { ChapterDoc, EditorDoc, ProjectData, ProjectMeta, StructureData } from "@/types/writeproj";
+import { emptyChapterDoc } from "@/types/writeproj";
 import {
   createProject as apiCreateProject,
   deleteProject as apiDeleteProject,
   getProjectsDir,
   importProject as apiImportProject,
+  listImportFiles,
   listProjects,
+  readBinaryFile,
   readProject,
+  readTextFile,
   renameProject as apiRenameProject,
+  saveProject as apiSaveProject,
   setProjectNote as apiSetProjectNote,
 } from "@/lib/tauri";
+import { importToDoc, parseImport } from "@/lib/fileFormats/parseImport";
 import { getSetting, setSetting } from "@/lib/settings";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { useEditorStore } from "@/stores/editorStore";
@@ -45,6 +51,10 @@ interface ProjectState {
   renameProject: (id: string, name: string) => Promise<void>;
   setProjectNote: (id: string, note: string) => Promise<void>;
   importProjectFile: () => Promise<void>;
+  /** 导入单个文档为工程（PDF/Markdown/TXT/Doc/Docx/EPUB） */
+  importFileAsProject: () => Promise<void>;
+  /** 导入文件夹为工程（每个受支持文件成为一章） */
+  importFolderAsProject: () => Promise<void>;
   openProjectById: (id: string) => Promise<void>;
   closeProject: () => void;
   markRecent: (meta: ProjectMeta) => Promise<void>;
@@ -142,6 +152,55 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
+  importFileAsProject: async () => {
+    try {
+      const path = await open({
+        multiple: false,
+        directory: false,
+        filters: IMPORT_FILTERS,
+      });
+      if (typeof path !== "string") return;
+      const parsed = await readAndParseImport(path);
+      const title = baseName(path);
+      const meta = await get().createProject(title);
+      if (!meta) return;
+      const data: ProjectData = buildImportedProjectData(meta, [{ title, doc: importToDoc(parsed) }]);
+      await apiSaveProject(data);
+      set({ projects: [meta, ...get().projects.filter((p) => p.id !== meta.id)] });
+      await get().openProjectById(meta.id);
+    } catch (e) {
+      console.error("导入文件为工程失败", e);
+      window.alert(e instanceof Error && e.message ? e.message : "导入文件失败，请确认文件格式受支持（PDF / Markdown / TXT / Word / EPUB）。");
+    }
+  },
+
+  importFolderAsProject: async () => {
+    try {
+      const dir = await open({ multiple: false, directory: true });
+      if (typeof dir !== "string") return;
+      const files = await listImportFiles(dir);
+      if (files.length === 0) {
+        window.alert("该文件夹中没有可导入的文档（支持 PDF / Markdown / TXT / Word / EPUB）。");
+        return;
+      }
+      const entries: { title: string; doc: ChapterDoc }[] = [];
+      for (const f of files) {
+        const parsed = await readAndParseImport(f.path);
+        entries.push({ title: baseName(f.name), doc: importToDoc(parsed) });
+      }
+      const folderName = dir.split(/[\\/]/).filter(Boolean).pop() ?? "导入的工程";
+      const meta = await get().createProject(folderName);
+      if (!meta) return;
+      const data: ProjectData = buildImportedProjectData(meta, entries);
+      await apiSaveProject(data);
+      set({ projects: [meta, ...get().projects.filter((p) => p.id !== meta.id)] });
+      await get().openProjectById(meta.id);
+    } catch (e) {
+      console.error("导入文件夹为工程失败", e);
+      window.alert(e instanceof Error && e.message ? e.message : "导入文件夹失败，请确认目录可读且包含受支持的文档。");
+    }
+  },
+
   openProjectById: async (id) => {
     try {
       const data = await readProject(id);
@@ -150,6 +209,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       usePluginStore.getState().applyProjectInstances(data.config?.instances);
       // 载入工程级设置（实例覆盖，含旧 editorFontSizes 迁移）
       useSettingsStore.getState().loadProjectSettings(data);
+      // v0.7：默认「大纲」实例定制文件/文件夹名（大纲分卷/大纲）；已有覆盖不重写
+      const settingsSt = useSettingsStore.getState();
+      for (const inst of usePluginStore.getState().instances) {
+        if (inst.prototypeId === EDITOR_PROTOTYPE && inst.id === "outline") {
+          if (settingsSt.getInstanceSetting("outline", "folderLabel") === undefined) {
+            settingsSt.setInstanceSetting("outline", "folderLabel", "大纲分卷");
+          }
+          if (settingsSt.getInstanceSetting("outline", "fileLabel") === undefined) {
+            settingsSt.setInstanceSetting("outline", "fileLabel", "大纲");
+          }
+        }
+      }
       const editorIds = usePluginStore
         .getState()
         .instances.filter((i) => i.enabled && i.prototypeId === EDITOR_PROTOTYPE)
@@ -216,6 +287,56 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     await setSetting(RECENT_KEY, next);
   },
 }));
+
+/** 开始页「导入文件/文件夹为工程」支持的格式 */
+const IMPORT_FILTERS = [
+  { name: "支持的文档", extensions: ["md", "txt", "pdf", "docx", "doc", "epub"] },
+  { name: "Markdown", extensions: ["md"] },
+  { name: "纯文本", extensions: ["txt"] },
+  { name: "PDF", extensions: ["pdf"] },
+  { name: "Word 文档", extensions: ["docx", "doc"] },
+  { name: "EPUB 电子书", extensions: ["epub"] },
+];
+
+/** 取路径/文件名的基名（去掉目录与扩展名） */
+function baseName(path: string): string {
+  const name = path.split(/[\\/]/).pop() ?? "导入";
+  return name.replace(/\.[^.]+$/, "");
+}
+
+/** 读取并解析导入文件：文本类（md/txt）走 readTextFile，二进制类走 base64 */
+async function readAndParseImport(path: string) {
+  const ext = (path.split(".").pop() ?? "").toLowerCase();
+  const isText = ext === "md" || ext === "txt";
+  const content = isText ? await readTextFile(path) : await readBinaryFile(path);
+  return parseImport(baseName(path), content, ext);
+}
+
+/**
+ * 构建「导入为工程」的工程数据：正文实例放入导入章节（文件=章节，文件名作章节名）。
+ * 复用默认编辑器实例 id（与打开工程时 applyProjectInstances 的模板一致）。
+ */
+function buildImportedProjectData(meta: ProjectMeta, entries: { title: string; doc: ChapterDoc }[]): ProjectData {
+  const editorId = usePluginStore
+    .getState()
+    .template.find((i) => i.enabled && i.prototypeId === EDITOR_PROTOTYPE)?.id ?? "editor";
+  const structure: StructureData = {
+    chapters: entries.map((e, i) => ({ id: crypto.randomUUID(), title: e.title, order: i })),
+    volumes: [],
+  };
+  const chapters: Record<string, ChapterDoc> = {};
+  for (let i = 0; i < structure.chapters.length; i++) {
+    chapters[structure.chapters[i].id] = entries[i].doc ?? emptyChapterDoc();
+  }
+  const editorDoc: EditorDoc = { structure, chapters };
+  return {
+    meta,
+    editors: { [editorId]: editorDoc },
+    timelines: {},
+    lore: {},
+    config: { mainView: editorId },
+  };
+}
 
 /**
  * 从工程实例设置恢复时间轴「当前使用颜色」与设定库当前连线/关系文本颜色（工程隔离）。

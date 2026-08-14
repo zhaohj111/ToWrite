@@ -19,6 +19,26 @@ export function registerLoreEditor(
   else editors.delete(instanceId);
 }
 
+/** 连接图截图导出句柄（由 LoreGraph 注册）：返回 PNG base64；无法捕获返回 null */
+type LoreCapture = () => Promise<string | null>;
+
+const captures = new Map<string, LoreCapture>();
+
+export function registerLoreCapture(
+  instanceId: string,
+  handler: LoreCapture | null,
+): void {
+  if (handler) captures.set(instanceId, handler);
+  else captures.delete(instanceId);
+}
+
+/** 导出设定库 PNG：让 LoreGraph 截图当前图（适应全部 → 截取 DOM → 还原视图） */
+export async function captureLoreGraph(instanceId: string): Promise<string | null> {
+  const handler = captures.get(instanceId);
+  if (!handler) return null;
+  return await handler();
+}
+
 /** 撤销：内容编辑器打开时驱动 TipTap 内容历史，否则撤销结构变更（增删卡片/连线/标签） */
 export function requestLoreUndo(instanceId: string): void {
   const ed = editors.get(instanceId);

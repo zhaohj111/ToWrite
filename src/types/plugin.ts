@@ -1,6 +1,6 @@
 // 模块契约（Module Contract）与贡献点（Contribution Point）骨架 —— v0.5 冻结 / v0.6 扩展。
 
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { Editor } from "@tiptap/react";
 import type { SettingsPageContribution } from "@/types/settings";
@@ -17,6 +17,18 @@ export type ContributionPoint =
 
 export interface EditorContext {
   editor: Editor;
+  /** 当前编辑器实例 id（core.editor 插件实例，用于实例级设置读写） */
+  instanceId: string;
+}
+
+/** 工具栏下拉菜单项（v0.7：导出/导入/表格等多项操作收进菜单）。
+ *  带 children 时渲染为二级子菜单（DropdownMenuSub），run 可省略。 */
+export interface ToolbarMenuItem {
+  title: string;
+  icon?: LucideIcon;
+  danger?: boolean;
+  run?: (ctx: EditorContext) => void;
+  children?: ToolbarMenuItem[];
 }
 
 export interface ToolbarItem {
@@ -26,6 +38,15 @@ export interface ToolbarItem {
   action: (ctx: EditorContext) => void;
   isActive?: (ctx: EditorContext) => boolean;
   divider?: boolean;
+  /** 有值时渲染为下拉菜单（点图标展开），而非直接执行 action */
+  menu?: ToolbarMenuItem[];
+  /** 自定义内联渲染（优先于 icon/action/menu），可嵌入取色块等交互组件 */
+  render?: (ctx: EditorContext) => ReactNode;
+  /**
+   * 显示开关分组：对应 core.editor 设置里的 toolbar* 布尔项（如 toolbarImage）。
+   * 工具栏按 resolveSetting(EDITOR_PROTOTYPE, instanceId, groupId) 过滤，false 时隐藏。
+   */
+  groupId?: string;
 }
 
 export interface CommandItem {
@@ -91,6 +112,18 @@ export interface PluginContext {
     point: P,
     contribution: ContributionOf<P>,
   ): void;
+  /**
+   * 宿主服务：窗口顶部结果提示（如导出成功/失败）。
+   * kind 缺省 info；detail 显示为副文本；filePath 有值时成功提示带「在文件夹中显示」按钮。
+   */
+  notify(message: string, options?: NotifyOptions): void;
+}
+
+/** PluginContext.notify 的可选项 */
+export interface NotifyOptions {
+  kind?: "success" | "error" | "info";
+  detail?: string;
+  filePath?: string;
 }
 
 /** 插件设置项出厂定义（级联第 ③ 层默认值）；instances 是否可覆盖由 instanceOverridable 声明 */

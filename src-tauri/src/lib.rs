@@ -1,4 +1,5 @@
 mod commands;
+mod pdf_export;
 mod updater;
 mod writeproj;
 
@@ -21,6 +22,12 @@ pub fn run() {
             commands::import_project,
             commands::migrate_data,
             commands::data_pointer_dir,
+            commands::read_text_file,
+            commands::read_binary_file,
+            commands::write_text_file,
+            commands::write_binary_file,
+            commands::list_import_files,
+            pdf_export::export_image_pdf,
             updater::check_update,
             updater::download_update,
             updater::fetch_changelog

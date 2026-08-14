@@ -53,6 +53,51 @@ export function getDataPointerDir(): Promise<string> {
   return invoke<string>("data_pointer_dir");
 }
 
+// ===================== 文件 I/O（导入导出用） =====================
+
+/** 读取 UTF-8 文本文件（Markdown/TXT/.timeline/.lore 导入）。 */
+export function readTextFile(path: string): Promise<string> {
+  return invoke<string>("read_text_file", { path });
+}
+
+/** 读取二进制文件并返回 base64（PDF/DOCX/DOC/EPUB 导入、图片插入）。 */
+export function readBinaryFile(path: string): Promise<string> {
+  return invoke<string>("read_binary_file", { path });
+}
+
+/** 写文本文件（TXT/Markdown/.timeline/.lore 导出）；自动创建父目录。 */
+export function writeTextFile(path: string, content: string): Promise<void> {
+  return invoke<void>("write_text_file", { path, content });
+}
+
+/** 写二进制文件（PNG 导出；入参为 base64）；自动创建父目录。 */
+export function writeBinaryFile(path: string, base64: string): Promise<void> {
+  return invoke<void>("write_binary_file", { path, base64 });
+}
+
+/** 递归列出一个受支持导入格式的单个文件（文件夹导入用）。 */
+export interface ImportFileInfo {
+  path: string;
+  name: string;
+}
+
+export function listImportFiles(dir: string): Promise<ImportFileInfo[]> {
+  return invoke<ImportFileInfo[]>("list_import_files", { dir });
+}
+
+/** 图片型 PDF 导出负载：每页为前端渲染的 PNG base64，Rust 整页嵌入。 */
+export interface ImagePdfPayload {
+  title: string;
+  /** 渲染 dpi（px = pt × dpi/72），Rust 侧按同 dpi 换算图片物理尺寸 */
+  dpi: number;
+  pages: string[];
+}
+
+/** 图片型 PDF 导出（前端 canvas 渲染逐页 → Rust 整页嵌入）。 */
+export function exportImagePdf(payload: ImagePdfPayload, outputPath: string): Promise<void> {
+  return invoke<void>("export_image_pdf", { payload, outputPath });
+}
+
 /** 更新检查结果（对应 Rust updater::UpdateInfo，camelCase） */
 export interface UpdateInfo {
   updateAvailable: boolean;

@@ -40,8 +40,11 @@ import {
 import { useLoreStore } from "@/stores/loreStore";
 import { useLoreUiStore } from "@/stores/loreUiStore";
 import { useInstanceId, useLoreSlice } from "@/components/editor/editorInstanceContext";
+import { registerLoreCapture } from "@/lib/loreBus";
+import { captureElementToPng } from "@/lib/fileFormats/pngExport";
 import { ColorPickerPanel } from "@/components/ui/colorPicker";
 import { cn } from "@/lib/cn";
+import { runForceLayout } from "@/lib/loreLayout";
 import type { LoreEdge, LoreEntry, LoreTag } from "@/types/writeproj";
 
 /** 节点卡片近似宽高（未实测时的兜底） */
@@ -60,6 +63,13 @@ const DEFAULT_LABEL_COLOR = "#8a8f98";
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(Math.max(v, lo), hi);
+}
+
+/** 等两帧（React 状态 → DOM 布局 → 绘制），供截图导出前等待视图切换生效 */
+function waitForPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
 }
 
 /** 右键菜单仿 Windows：尽量贴住鼠标，超出右/下边缘时内收 */
@@ -216,14 +226,11 @@ export function LoreGraph({
     sizesRef.current = next;
   }, [cards]);
 
-  // —— 自适应缩放：让全部卡片 + 边恰好进入视口 ——
-  const fit = useCallback(() => {
+  // —— 自适应缩放：让全部卡片 + 边恰好进入视口（纯计算，供「适应全部」与截图导出共用） ——
+  const computeFitView = useCallback(() => {
     const el = viewportRef.current;
-    if (!el) return;
-    if (cards.length === 0) {
-      setView({ x: 0, y: 0, zoom: 1 });
-      return;
-    }
+    if (!el) return null;
+    if (cards.length === 0) return { x: 0, y: 0, zoom: 1 };
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
     for (const c of cards) {
       const p = posFor(c);
@@ -240,17 +247,41 @@ export function LoreGraph({
       MIN_ZOOM,
       MAX_ZOOM,
     );
-    setView({
+    return {
       x: el.clientWidth / 2 - (zoom * (x0 + x1)) / 2,
       y: el.clientHeight / 2 - (zoom * (y0 + y1)) / 2,
       zoom,
-    });
+    };
   }, [cards, posFor]);
+
+  const fit = useCallback(() => {
+    const v = computeFitView();
+    if (v) setView(v);
+  }, [computeFitView]);
 
   useEffect(() => {
     fit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileId]);
+
+  // —— 截图式 PNG 导出：适应全部 → 截取应用内 DOM → 还原视图（供右上角导出按钮调用） ——
+  useEffect(() => {
+    return registerLoreCapture(instanceId, async () => {
+      const el = viewportRef.current;
+      if (!el) return null;
+      const prev = viewRef.current;
+      const fitView = computeFitView();
+      if (fitView) setView(fitView);
+      try {
+        await waitForPaint();
+        const target = viewportRef.current;
+        if (!target) return null;
+        return await captureElementToPng(target);
+      } finally {
+        if (fitView) setView(prev);
+      }
+    });
+  }, [instanceId, computeFitView]);
 
   // ④ 网格「在导向图中显示」：图视图挂载时定位到选中卡片
   useEffect(() => {
@@ -776,8 +807,8 @@ export function LoreGraph({
           })}
         </div>
 
-        {/* 左下角缩放控件 */}
-        <div className="absolute bottom-3 left-3 z-10 flex flex-col overflow-hidden rounded-lg border border-line/70 bg-app/90 shadow-sm">
+        {/* 左下角缩放控件（截图导出时经 data-overlay 排除） */}
+        <div data-overlay className="absolute bottom-3 left-3 z-10 flex flex-col overflow-hidden rounded-lg border border-line/70 bg-app/90 shadow-sm">
           <button
             title="放大"
             onPointerDown={(e) => e.stopPropagation()}
@@ -1448,41 +1479,3 @@ function ConnectMenu({
   );
 }
 
-// ================= 力导向布局 =================
-
-/** 极简力导向：给没有坐标的卡片按拓扑关系铺开（有坐标的卡片保持原位） */
-function runForceLayout(cards: LoreEntry[], edges: LoreEdge[]): Map<string, { x: number; y: number }> {
-  const out = new Map<string, { x: number; y: number }>();
-  const fixed = new Set(cards.filter((c) => c.x !== undefined && c.y !== undefined).map((c) => c.id));
-  // 简单网格回退位置
-  const grid: Record<string, { x: number; y: number }> = {};
-  cards.forEach((c, i) => {
-    const col = i % 6;
-    const row = Math.floor(i / 6);
-    grid[c.id] = { x: col * 240 - 600, y: row * 160 - 160 };
-  });
-  const pos = (id: string) => out.get(id) ?? grid[id] ?? { x: 0, y: 0 };
-  // 邻接列表
-  const adj = new Map<string, string[]>();
-  for (const c of cards) adj.set(c.id, []);
-  for (const e of edges) {
-    adj.get(e.source)?.push(e.target);
-    adj.get(e.target)?.push(e.source);
-  }
-  // 逐步拉近相连卡片（少量迭代）
-  for (let iter = 0; iter < 20; iter++) {
-    for (const c of cards) {
-      if (fixed.has(c.id)) continue;
-      const neighbors = (adj.get(c.id) ?? []).map(pos);
-      if (neighbors.length === 0) continue;
-      const cx = neighbors.reduce((s, n) => s + n.x, 0) / neighbors.length;
-      const cy = neighbors.reduce((s, n) => s + n.y, 0) / neighbors.length;
-      const cur = pos(c.id);
-      out.set(c.id, { x: cur.x + (cx - cur.x) * 0.4, y: cur.y + (cy - cur.y) * 0.4 });
-    }
-  }
-  for (const c of cards) {
-    if (c.x !== undefined && c.y !== undefined) out.set(c.id, { x: c.x, y: c.y });
-  }
-  return out;
-}

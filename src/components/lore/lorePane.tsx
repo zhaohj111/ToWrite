@@ -4,13 +4,20 @@
 // 撤销/重做/布局切换由宿主工具栏驱动（见 mainArea）。
 
 import { useEffect, useRef, useState } from "react";
-import { Search, X } from "lucide-react";
+import { Download, FileImage, FileUp, Search, Upload, X } from "lucide-react";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { useLoreStore } from "@/stores/loreStore";
 import { EMPTY_LORE_UI_SLICE, useLoreUiStore } from "@/stores/loreUiStore";
 import { useInstanceId, useLoreSlice } from "@/components/editor/editorInstanceContext";
 import { LoreGraphRoot } from "@/components/lore/loreGraph";
 import { LoreGrid } from "@/components/lore/loreGrid";
 import { LoreCardEditor } from "@/components/lore/loreCardEditor";
+import type { LoreData } from "@/types/writeproj";
+import { readTextFile, writeBinaryFile, writeTextFile } from "@/lib/tauri";
+import { serializeLore, parseLore } from "@/lib/fileFormats/loreFormat";
+import { captureLoreGraph } from "@/lib/loreBus";
+import { notifyError, notifySuccess } from "@/lib/notify";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
 
 export function LorePane() {
@@ -123,6 +130,86 @@ export function LorePane() {
     if (editingId && ids.includes(editingId)) closeCard(instanceId);
   };
 
+  // —— v0.7：导出（.lore / .png）与导入（.lore）——
+  const [ioBusy, setIoBusy] = useState(false);
+  const exportLore = async (kind: "lore" | "png") => {
+    if (!fileId) return;
+    const st = useLoreStore.getState();
+    const cur = st.getSlice(instanceId);
+    const data = cur.docs[fileId] ?? { cards: [], edges: [] };
+    const title = cur.files.find((f) => f.id === fileId)?.title ?? "设定库";
+    const path = await save({
+      title: kind === "png" ? "导出设定库 PNG" : "导出设定库",
+      defaultPath: `${title}.${kind}`,
+      filters:
+        kind === "png"
+          ? [{ name: "PNG 图片", extensions: ["png"] }]
+          : [{ name: "设定库文件", extensions: ["lore"] }],
+    });
+    if (!path) return;
+    setIoBusy(true);
+    try {
+      if (kind === "png") {
+        // 截图式导出：直接截取应用内连接图的 DOM；网格/搜索筛选时连接图未挂载，引导切换
+        const base64 = await captureLoreGraph(instanceId);
+        if (!base64) {
+          notifyError("无法导出设定库 PNG", "请在「连接图」视图下导出（网格布局 / 搜索筛选时会切换到网格）。");
+          return;
+        }
+        await writeBinaryFile(path, base64);
+        notifySuccess(`已导出设定库「${title}」PNG`, path, path);
+      } else {
+        await writeTextFile(path, serializeLore(title, data, cur.tags));
+        notifySuccess(`已导出设定库「${title}」`, path, path);
+      }
+    } catch (e) {
+      console.error("导出设定库失败", e);
+      notifyError(
+        "导出设定库失败",
+        e instanceof Error ? e.message : typeof e === "string" ? e : "导出失败，请重试。",
+      );
+    } finally {
+      setIoBusy(false);
+    }
+  };
+  const importLore = async () => {
+    const path = await open({
+      multiple: false,
+      directory: false,
+      filters: [{ name: "设定库文件", extensions: ["lore"] }],
+    });
+    if (typeof path !== "string") return;
+    setIoBusy(true);
+    try {
+      const text = await readTextFile(path);
+      const parsed = parseLore(text);
+      const st = useLoreStore.getState();
+      const cur = st.getSlice(instanceId);
+      // 合并文件内标签到实例级：同名复用既有标签，否则新建；建立旧 id → 新 id 映射
+      const idMap = new Map<string, string>();
+      for (const t of parsed.tags ?? []) {
+        const existing = cur.tags.find((x) => x.name === t.name);
+        if (existing) idMap.set(t.id, existing.id);
+        else idMap.set(t.id, st.addTag(instanceId, t.name, t.color).id);
+      }
+      // 重映射卡片标签引用，避免指向导入前的旧 id
+      const data: LoreData = {
+        cards: parsed.data.cards.map((c) => ({
+          ...c,
+          tags: c.tags.map((id) => idMap.get(id) ?? id),
+        })),
+        edges: parsed.data.edges,
+      };
+      // 新增一条设定库文件（导入数据写盘；addFile 自动切换到新文件）
+      const file = st.addFile(instanceId, parsed.title);
+      st.setFileData(instanceId, file.id, data);
+    } catch (e) {
+      console.error("导入设定库失败", e);
+    } finally {
+      setIoBusy(false);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col">
       {/* 面板头部：搜索 */}
@@ -213,7 +300,7 @@ export function LorePane() {
       )}
 
       {/* 主体 */}
-      <div className="min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1">
         {showGrid || !fileId ? (
           <LoreGrid
             onNew={handleNew}
@@ -226,6 +313,43 @@ export function LorePane() {
             onDeleteCards={(cards) => deleteCards(cards.map((c) => c.id))}
           />
         )}
+
+        {/* 右下角：导出 / 导入（v0.7） */}
+        <div data-overlay className="absolute bottom-3 right-3 z-10 flex overflow-hidden rounded-lg border border-line/70 bg-app/90 shadow-sm">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                title="导出设定库"
+                disabled={ioBusy}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="flex h-7 items-center gap-1 px-2 text-xs text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
+              >
+                <Download className="size-3.5" />
+                导出
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => void exportLore("lore")}>
+                <FileUp className="size-3.5 opacity-70" />
+                <span className="flex-1">导出设定库文件（.lore）</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void exportLore("png")}>
+                <FileImage className="size-3.5 opacity-70" />
+                <span className="flex-1">导出 PNG 图片（连接图）</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <button
+            title="导入设定库文件"
+            disabled={ioBusy}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => void importLore()}
+            className="flex h-7 items-center gap-1 border-l border-line/60 px-2 text-xs text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
+          >
+            <Upload className="size-3.5" />
+            导入
+          </button>
+        </div>
       </div>
 
       {/* 卡片编辑器 */}

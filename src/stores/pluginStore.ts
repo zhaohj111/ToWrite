@@ -26,10 +26,13 @@ export const EDITOR_PROTOTYPE = "core.editor";
 /** 携带时间轴文档的插件原型（其每个实例在工程内有一份独立文档） */
 export const TIMELINE_PROTOTYPE = "core.timeline";
 
-/** 默认实例：正文、时间轴、设定库（v0.6 起「大纲」实例随大纲功能一并移除） */
+/** 默认实例：正文、大纲、时间轴、设定库。
+ *  v0.7 起恢复「大纲」实例：同属 core.editor（章节侧栏），文件夹/文件名经实例设置定制为「大纲分卷/大纲」，
+ *  排在与正文紧邻的位置；新建工程与重置默认时生效。 */
 export function defaultInstances(): PluginInstance[] {
   return [
     { id: "editor", prototypeId: EDITOR_PROTOTYPE, name: "正文", sidebarViewId: "chapters", enabled: true },
+    { id: "outline", prototypeId: EDITOR_PROTOTYPE, name: "大纲", sidebarViewId: "chapters", enabled: true },
     { id: "timeline", prototypeId: TIMELINE_PROTOTYPE, name: "时间轴", sidebarViewId: "timeline-files", enabled: true },
     { id: "lore", prototypeId: "core.lore", name: "设定库", sidebarViewId: "lore", enabled: true },
   ];
@@ -37,10 +40,8 @@ export function defaultInstances(): PluginInstance[] {
 
 /** 实例字段迁移（程序模板与工程实例共用）：
     迁移 1：早期「大纲」曾指向 outline（标题导航）侧栏，无法管理章节，统一改为 chapters
-    迁移 2：早期「时间轴」未启用侧栏（null），现统一启用 timeline-files 文件树
-    v0.6：大纲功能整体移除，删除旧「大纲」实例（id "outline"，属 core.editor）；返回 null 表示剔除 */
+    迁移 2：早期「时间轴」未启用侧栏（null），现统一启用 timeline-files 文件树 */
 function migrateInstance(inst: PluginInstance): PluginInstance | null {
-  if (inst.prototypeId === EDITOR_PROTOTYPE && inst.id === "outline") return null;
   if (inst.prototypeId === EDITOR_PROTOTYPE && inst.sidebarViewId === "outline") {
     return { ...inst, sidebarViewId: "chapters" };
   }
@@ -51,6 +52,29 @@ function migrateInstance(inst: PluginInstance): PluginInstance | null {
     return { ...inst, sidebarViewId: "timeline-files" };
   }
   return inst;
+}
+
+/** 程序级模板补全「大纲」实例（v0.7 默认）：缺失时在「正文」之后插入。
+ *  仅作用于模板（新工程兜底），不强制改写已保存的工程实例列表。 */
+function ensureOutline(template: PluginInstance[]): PluginInstance[] {
+  const hasOutline = template.some(
+    (i) => i.prototypeId === EDITOR_PROTOTYPE && i.id === "outline",
+  );
+  if (hasOutline) return template;
+  const outline: PluginInstance = {
+    id: "outline",
+    prototypeId: EDITOR_PROTOTYPE,
+    name: "大纲",
+    sidebarViewId: "chapters",
+    enabled: true,
+  };
+  const anchor = template.findIndex(
+    (i) => i.prototypeId === EDITOR_PROTOTYPE && i.id === "editor",
+  );
+  const at = anchor >= 0 ? anchor + 1 : template.length;
+  const next = [...template];
+  next.splice(at, 0, outline);
+  return next;
 }
 
 interface PluginState {
@@ -83,11 +107,13 @@ export const usePluginStore = create<PluginState>((set, get) => ({
     const saved = await getSetting<PluginInstance[] | null>(KEY, null);
     if (saved && Array.isArray(saved) && saved.length > 0) {
       const mapped = saved.map(migrateInstance);
-      const next = mapped.filter((i): i is PluginInstance => i !== null);
-      const migrated =
+      const migrated = mapped.filter((i): i is PluginInstance => i !== null);
+      // v0.7：模板补全「大纲」默认实例
+      const next = ensureOutline(migrated);
+      const changed =
         next.length !== saved.length || next.some((m, i) => m !== saved[i]);
       set({ template: next, instances: next.map((i) => ({ ...i })) });
-      if (migrated) void setSetting(KEY, next);
+      if (changed) void setSetting(KEY, next);
     } else {
       const next = defaultInstances();
       set({ template: next, instances: next.map((i) => ({ ...i })) });

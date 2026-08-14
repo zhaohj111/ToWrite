@@ -19,6 +19,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import {
   CalendarRange,
+  Download,
+  FileImage,
+  FileUp,
   Maximize2,
   Minus,
   Paintbrush,
@@ -27,12 +30,19 @@ import {
   Plus,
   Search,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import { normalizeDoc, useTimelineStore, DEFAULT_COLOR_LEGEND } from "@/stores/timelineStore";
 import { useTimelineUiStore } from "@/stores/timelineUiStore";
 import { useInstanceId, useTimelineDoc, useTimelineSlice } from "@/components/editor/editorInstanceContext";
 import { registerFitHandler, registerUndoHandler, registerRedoHandler } from "@/lib/timelineBus";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { readTextFile, writeTextFile, writeBinaryFile } from "@/lib/tauri";
+import { serializeTimeline, parseTimeline } from "@/lib/fileFormats/timelineFormat";
+import { captureElementToPng } from "@/lib/fileFormats/pngExport";
+import { notifyError, notifySuccess } from "@/lib/notify";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
 import type { ColorLegendItem, TimelineData, TimelineNodeData } from "@/types/writeproj";
 
@@ -56,6 +66,13 @@ function clamp(v: number, lo: number, hi: number): number {
 function formatNum(v: number): string {
   if (Number.isInteger(v)) return String(v);
   return String(parseFloat(v.toFixed(2)));
+}
+
+/** 等两帧（React 状态 → DOM 布局 → 绘制），供截图导出前等待视图切换生效 */
+function waitForPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
 }
 
 /** 右键菜单仿 Windows：尽量贴住鼠标，超出右/下边缘时内收 */
@@ -169,6 +186,84 @@ function TimelineCanvas({
     colorLegend[0]?.color ??
     DEFAULT_COLOR_LEGEND[0].color;
 
+  // —— v0.7：导出（.timeline / .png）与导入（.timeline）——
+  const [ioBusy, setIoBusy] = useState(false);
+  const exportTimeline = async (kind: "timeline" | "png") => {
+    const fileMeta = slice.files.find((f) => f.id === fileId);
+    const title = fileMeta?.title ?? "时间轴";
+    const path = await save({
+      title: kind === "png" ? "导出时间轴 PNG" : "导出时间轴",
+      defaultPath: `${title}.${kind}`,
+      filters:
+        kind === "png"
+          ? [{ name: "PNG 图片", extensions: ["png"] }]
+          : [{ name: "时间轴文件", extensions: ["timeline"] }],
+    });
+    if (!path) return;
+    setIoBusy(true);
+    try {
+      if (kind === "png") {
+        // 截图式导出：先「适应全部」让全局图进入视口，截取应用内实际 DOM，无论成败都还原视图
+        const el = viewportRef.current;
+        if (!el) {
+          notifyError("导出时间轴 PNG 失败", "画布未就绪，请重试。");
+          return;
+        }
+        const prev = viewRef.current;
+        const fitView = computeFitView();
+        if (fitView) setView(fitView);
+        try {
+          await waitForPaint();
+          const target = viewportRef.current;
+          if (!target) {
+            notifyError("导出时间轴 PNG 失败", "画布未就绪，请重试。");
+            return;
+          }
+          const base64 = await captureElementToPng(target);
+          await writeBinaryFile(path, base64);
+        } finally {
+          if (fitView) setView(prev);
+        }
+        notifySuccess(`已导出时间轴「${title}」PNG`, path, path);
+      } else {
+        const data = { ...doc, colorLegend };
+        await writeTextFile(path, serializeTimeline(title, data));
+        notifySuccess(`已导出时间轴「${title}」`, path, path);
+      }
+    } catch (e) {
+      console.error("导出时间轴失败", e);
+      notifyError(
+        "导出时间轴失败",
+        e instanceof Error ? e.message : typeof e === "string" ? e : "导出失败，请重试。",
+      );
+    } finally {
+      setIoBusy(false);
+    }
+  };
+  const importTimeline = async () => {
+    const path = await open({
+      multiple: false,
+      directory: false,
+      filters: [{ name: "时间轴文件", extensions: ["timeline"] }],
+    });
+    if (typeof path !== "string") return;
+    setIoBusy(true);
+    try {
+      const text = await readTextFile(path);
+      const parsed = parseTimeline(text);
+      const st = useTimelineStore.getState();
+      // 合并文件内图例到实例级（颜色去重）
+      for (const l of parsed.data.colorLegend ?? []) st.addLegendEntry(instanceId, l.color, l.label);
+      // 新增一条时间轴文件（导入数据写盘；addFile 自动切换到新文件）
+      const file = st.addFile(instanceId, parsed.title);
+      st.setFileDoc(instanceId, file.id, parsed.data);
+    } catch (e) {
+      console.error("导入时间轴失败", e);
+    } finally {
+      setIoBusy(false);
+    }
+  };
+
   const viewportRef = useRef<HTMLDivElement>(null);
   const noteElsRef = useRef<Record<string, HTMLDivElement | null>>({});
   const sizesRef = useRef<Record<string, { w: number; h: number }>>({});
@@ -253,10 +348,10 @@ function TimelineCanvas({
     sizesRef.current = next;
   }, [doc.nodes]);
 
-  // —— 自适应缩放：让时间区间 + 全部标签恰好进入视口 ——
-  const fit = useCallback(() => {
+  // —— 自适应缩放：让时间区间 + 全部标签恰好进入视口（纯计算，供「适应全部」与截图导出共用） ——
+  const computeFitView = useCallback(() => {
     const el = viewportRef.current;
-    if (!el) return;
+    if (!el) return null;
     const d = dataRef.current;
     let x0 = d.rangeStart * TIME_SCALE;
     let x1 = d.rangeEnd * TIME_SCALE;
@@ -278,12 +373,17 @@ function TimelineCanvas({
       MIN_ZOOM,
       MAX_ZOOM,
     );
-    setView({
+    return {
       x: el.clientWidth / 2 - (zoom * (x0 + x1)) / 2,
       y: el.clientHeight / 2 - (zoom * (y0 + y1)) / 2,
       zoom,
-    });
+    };
   }, []);
+
+  const fit = useCallback(() => {
+    const v = computeFitView();
+    if (v) setView(v);
+  }, [computeFitView]);
 
   useEffect(() => {
     fit();
@@ -912,6 +1012,43 @@ function TimelineCanvas({
             </div>
           </div>
         )}
+
+        {/* 右下角：导出 / 导入（v0.7） */}
+        <div data-overlay className="absolute bottom-3 right-3 z-10 flex overflow-hidden rounded-lg border border-line/70 bg-app/90 shadow-sm">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                title="导出时间轴"
+                disabled={ioBusy}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="flex h-7 items-center gap-1 px-2 text-xs text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
+              >
+                <Download className="size-3.5" />
+                导出
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => void exportTimeline("timeline")}>
+                <FileUp className="size-3.5 opacity-70" />
+                <span className="flex-1">导出时间轴文件（.timeline）</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void exportTimeline("png")}>
+                <FileImage className="size-3.5 opacity-70" />
+                <span className="flex-1">导出 PNG 图片</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <button
+            title="导入时间轴文件"
+            disabled={ioBusy}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => void importTimeline()}
+            className="flex h-7 items-center gap-1 border-l border-line/60 px-2 text-xs text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
+          >
+            <Upload className="size-3.5" />
+            导入
+          </button>
+        </div>
       </div>
 
       {/* 框选矩形（屏幕坐标，Portal 到 body，规避 CSS zoom 偏移） */}

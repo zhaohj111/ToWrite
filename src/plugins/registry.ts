@@ -3,6 +3,7 @@
 //   2. 贡献点注册（editor.toolbar / editor.commands / ... / i18n.resources）
 
 import type { ContributionMap, ContributionPoint, ModuleContract } from "@/types/plugin";
+import { notify } from "@/lib/notify";
 
 type Listener = () => void;
 
@@ -20,6 +21,9 @@ class PluginRegistry {
         point: P,
         contribution: ContributionMap[P],
       ) => this.registerContribution(point, contribution),
+      // 宿主服务：窗口顶部结果提示（导出成功/失败等）
+      notify: (message: string, options?: { kind?: "success" | "error" | "info"; detail?: string; filePath?: string }) =>
+        notify(message, options),
     };
     try {
       module.activate(ctx);

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { TitleBar } from "@/components/titlebar";
+import { ToastHost } from "@/components/toasts";
 import { StartPage } from "@/components/startPage";
 import { ContentPage } from "@/components/contentPage";
 import { SettingsPage } from "@/components/settings/settingsPage";
@@ -133,6 +134,8 @@ export default function App() {
       {/* 氛围层：缓慢漂移的墨色光晕 + 细腻噪点 */}
       <div className="ambient" aria-hidden />
       <div className="grain" aria-hidden />
+      {/* 窗口顶部结果提示（导出等操作的成功/失败通知） */}
+      <ToastHost />
 
       <div className="relative z-10 flex min-h-0 flex-1 flex-col">
         <TitleBar />

@@ -9,10 +9,13 @@ import { cn } from "@/lib/cn";
 export function ColorPickerPanel({
   value,
   onChange,
+  onCommit,
   presets,
 }: {
   value: string;
   onChange: (color: string) => void;
+  /** 一次交互结束（松手/点选预设）时回调：由使用方落一次最终值（如只入一次撤销栈） */
+  onCommit?: (color: string) => void;
   presets?: string[];
 }) {
   const palette = presets ?? PRESET_COLORS;
@@ -32,13 +35,13 @@ export function ColorPickerPanel({
 
   return (
     <div className="w-[236px] p-2">
-      {/* 预设色 */}
+      {/* 预设色：点选即一次提交（单次撤销步） */}
       <div className="grid grid-cols-5 gap-1.5">
         {palette.map((c) => (
           <button
             key={c}
             title={c}
-            onClick={() => onChange(c)}
+            onClick={() => (onCommit ? onCommit(c) : onChange(c))}
             className={cn(
               "size-6 rounded-full ring-1 ring-line transition-transform hover:scale-110",
               value.toLowerCase() === c.toLowerCase() && "ring-2 ring-accent",
@@ -48,7 +51,7 @@ export function ColorPickerPanel({
         ))}
       </div>
 
-      {/* 饱和度/明度方块 */}
+      {/* 饱和度/明度方块：拖动中只回调解的实时色，松手才提交最终值 */}
       <div
         className="relative mt-2 h-28 w-full cursor-crosshair touch-none overflow-hidden rounded-lg border border-line/70"
         style={{
@@ -61,6 +64,7 @@ export function ColorPickerPanel({
         onPointerMove={(e) => {
           if (e.buttons & 1) setFromSV(e.currentTarget, e);
         }}
+        onPointerUp={() => onCommit?.(value)}
       >
         <div
           className="pointer-events-none absolute size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow"
@@ -68,7 +72,7 @@ export function ColorPickerPanel({
         />
       </div>
 
-      {/* 色相滑条 */}
+      {/* 色相滑条：拖动中只回调解的实时色，松手才提交最终值 */}
       <div
         className="relative mt-1.5 h-3 w-full cursor-pointer touch-none rounded-full border border-line/70"
         style={{ background: "linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)" }}
@@ -79,6 +83,7 @@ export function ColorPickerPanel({
         onPointerMove={(e) => {
           if (e.buttons & 1) setFromHue(e.currentTarget, e);
         }}
+        onPointerUp={() => onCommit?.(value)}
       >
         <div
           className="pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow"
