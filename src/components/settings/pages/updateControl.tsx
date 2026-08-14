@@ -1,9 +1,11 @@
 // 关于 > 关于应用 > 版本与更新：当前版本、手动检查、自动检查开关、下载进度与结果。
 // 状态来自 updateStore（Rust check_update / download_update + update://progress 事件）。
+// 更新说明（GitHub Release 正文，Markdown）用 Markdown 组件富文本渲染（含多级列表）。
 
 import { AlertCircle, CheckCircle2, Download, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SettingToggle } from "@/components/settings/controls";
+import { Markdown } from "@/components/ui/markdown";
 import { useAppVersion } from "@/lib/appInfo";
 import { useUpdateStore } from "@/stores/updateStore";
 import { cn } from "@/lib/cn";
@@ -76,9 +78,9 @@ export function UpdateControl() {
             </p>
           )}
           {notes && (
-            <p className="line-clamp-3 whitespace-pre-wrap text-xs leading-relaxed text-fg-muted">
-              {notes}
-            </p>
+            <div className="max-h-44 overflow-y-auto rounded-md bg-panel-2/40 px-2.5 py-1.5">
+              <Markdown source={notes} />
+            </div>
           )}
         </div>
       )}

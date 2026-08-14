@@ -1,21 +1,88 @@
-// 轻量 Markdown 渲染（插件详情 / 更新日志 / 自有设置页用）：无外部依赖。
+// 轻量 Markdown 渲染（插件详情 / 更新日志 / 自有设置页 / 更新说明用）：无外部依赖。
 // 支持子集：标题（#~####）、段落、**加粗**、*斜体*、`行内代码`、[链接](url)、
-// 无序/有序列表、> 引用、--- 分隔线、``` 围栏代码块。
-// 第三方插件把详情/更新日志写成 .md，用 Vite `?raw` 导入传入即可；超出子集的语法按纯文本展示。
+// 多级无序/有序列表（缩进逐级嵌套，支持「松散列表」空行分隔与条目续行）、
+// > 引用、--- 分隔线、``` 围栏代码块。超出子集的语法按纯文本展示。
+// 第三方插件把详情/更新日志写成 .md，用 Vite `?raw` 导入传入即可。
 
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
+/** 列表条目：text 为条目文本（续行以 \n 连接），children 为更深缩进的嵌套条目 */
+type ListItem = {
+  text: string;
+  depth: number;
+  ordered: boolean;
+  children: ListItem[];
+};
+
 type Block =
   | { t: "heading"; level: number; text: string }
   | { t: "paragraph"; text: string }
-  | { t: "ul"; items: string[] }
-  | { t: "ol"; items: string[] }
+  | { t: "list"; items: ListItem[] }
   | { t: "quote"; text: string }
   | { t: "code"; lang: string; code: string }
   | { t: "hr" };
 
 const HEADING_SIZES = ["text-xl", "text-lg", "text-base", "text-[15px]"];
+
+/** 列表行：缩进 + 标记（- / * / 1.）+ 内容 */
+const LIST_LINE_RE = /^(\s*)([-*]|\d+\.)\s+(.*)$/;
+
+/**
+ * 从 start 行开始解析一段连续列表（含缩进嵌套）为条目树。
+ * - 嵌套深度按相对基础缩进的 2 空格一级换算；
+ * - 松散列表：条目间空行后若跟更深缩进的列表行，视为同一列表继续（不打断嵌套）；
+ * - 比基础缩进更深、且不是列表标记的行，作为最近条目的续行追加。
+ * 返回条目树与消费到的下一行下标。
+ */
+function parseList(lines: string[], start: number): { items: ListItem[]; next: number } {
+  const first = LIST_LINE_RE.exec(lines[start]);
+  const baseIndent = first?.[1].length ?? 0;
+  const root: ListItem[] = [];
+  const stack: ListItem[] = [];
+  let i = start;
+  while (i < lines.length) {
+    const raw = lines[i];
+    if (raw.trim() === "") {
+      // 空行：向后看第一个非空行，若是更深缩进的列表行则跳过空行继续（松散列表）
+      let j = i + 1;
+      while (j < lines.length && lines[j].trim() === "") j++;
+      const peek = LIST_LINE_RE.exec(lines[j] ?? "");
+      if (peek && peek[1].length > baseIndent) {
+        i++;
+        continue;
+      }
+      break;
+    }
+    const m = LIST_LINE_RE.exec(raw);
+    if (m) {
+      const indent = m[1].length;
+      const depth = Math.max(0, Math.round((indent - baseIndent) / 2));
+      const item: ListItem = {
+        text: m[3],
+        depth,
+        ordered: /^\d+\.$/.test(m[2]),
+        children: [],
+      };
+      // 栈式建树：弹出深度不小于当前项的条目，挂到最近的更浅条目下
+      while (stack.length > 0 && stack[stack.length - 1].depth >= depth) stack.pop();
+      if (stack.length === 0) root.push(item);
+      else stack[stack.length - 1].children.push(item);
+      stack.push(item);
+      i++;
+      continue;
+    }
+    // 非列表行：比基础缩进更深 → 最近条目的续行
+    const indent = (raw.match(/^\s*/)?.[0] ?? "").length;
+    if (indent > baseIndent && stack.length > 0) {
+      stack[stack.length - 1].text += "\n" + raw.trim();
+      i++;
+      continue;
+    }
+    break;
+  }
+  return { items: root, next: i };
+}
 
 /** 按空行 / 块标记切分为块 */
 function parseBlocks(src: string): Block[] {
@@ -60,22 +127,10 @@ function parseBlocks(src: string): Block[] {
       blocks.push({ t: "quote", text: quote.join("\n") });
       continue;
     }
-    const isOl = /^\d+\.\s+/.test(trimmed);
-    if (isOl || /^[-*]\s+/.test(trimmed)) {
-      const items: string[] = [];
-      let ol = isOl;
-      while (i < lines.length) {
-        const l = lines[i].trim();
-        if (/^\d+\.\s+/.test(l)) {
-          ol = true;
-          items.push(l.replace(/^\d+\.\s+/, ""));
-          i++;
-        } else if (/^[-*]\s+/.test(l)) {
-          items.push(l.replace(/^[-*]\s+/, ""));
-          i++;
-        } else break;
-      }
-      blocks.push({ t: ol ? "ol" : "ul", items });
+    if (LIST_LINE_RE.test(trimmed)) {
+      const { items, next } = parseList(lines, i);
+      if (items.length > 0) blocks.push({ t: "list", items });
+      i = next;
       continue;
     }
     const para: string[] = [trimmed];
@@ -88,8 +143,7 @@ function parseBlocks(src: string): Block[] {
         l.startsWith(">") ||
         l.startsWith("```") ||
         l === "---" ||
-        /^[-*]\s+/.test(l) ||
-        /^\d+\.\s+/.test(l)
+        LIST_LINE_RE.test(l)
       ) {
         break;
       }
@@ -163,6 +217,25 @@ function Inline({ text }: { text: string }) {
   return <>{tokenizeInline(text)}</>;
 }
 
+/** 递归渲染列表条目：每条目按自身标记（有序/无序）独立渲染，嵌套子条目挂在条目下方 */
+function ListItemView({ item }: { item: ListItem }) {
+  const Tag = item.ordered ? "ol" : "ul";
+  return (
+    <Tag className={cn("space-y-1 pl-5", item.ordered ? "list-decimal" : "list-disc")}>
+      <li>
+        <Inline text={item.text} />
+        {item.children.length > 0 && (
+          <div className="mt-1">
+            {item.children.map((c, j) => (
+              <ListItemView key={j} item={c} />
+            ))}
+          </div>
+        )}
+      </li>
+    </Tag>
+  );
+}
+
 export function Markdown({
   source,
   headingId,
@@ -199,25 +272,13 @@ export function Markdown({
                 <Inline text={b.text} />
               </p>
             );
-          case "ul":
+          case "list":
             return (
-              <ul key={i} className="list-disc space-y-1 pl-5">
+              <div key={i} className="space-y-1">
                 {b.items.map((it, j) => (
-                  <li key={j}>
-                    <Inline text={it} />
-                  </li>
+                  <ListItemView key={j} item={it} />
                 ))}
-              </ul>
-            );
-          case "ol":
-            return (
-              <ol key={i} className="list-decimal space-y-1 pl-5">
-                {b.items.map((it, j) => (
-                  <li key={j}>
-                    <Inline text={it} />
-                  </li>
-                ))}
-              </ol>
+              </div>
             );
           case "quote":
             return (
