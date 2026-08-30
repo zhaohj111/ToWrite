@@ -143,6 +143,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     });
   },
 
+
   closeTab: (instanceId, id) => {
     const cur = get().slices[instanceId] ?? EMPTY_SLICE;
     const tabs = cur.openTabs.filter((t) => t !== id);

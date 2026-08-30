@@ -223,16 +223,21 @@ async function importAsNewChapter(instanceId: string) {
 
 /** 导入并替换当前章节内容（store 变更不会自动触发编辑器重载，需手动 setContent） */
 async function importToCurrentChapter(instanceId: string, editor: Editor) {
+  // 先快照目标章节：文件对话框/解析期间用户可能已切换到其他章节，
+  // 若之后再取 currentChapterId 会把导入内容写进「后来选中」的章节（串章）。
+  const id = useEditorStore.getState().getSlice(instanceId).currentChapterId;
+  if (!id) return;
   const path = await pickImportFile();
   if (!path) return;
   try {
     const parsed = await readAndParse(path);
     const st = useEditorStore.getState();
-    const id = st.getSlice(instanceId).currentChapterId;
-    if (!id) return;
     const doc = importToDoc(parsed);
     st.setContent(instanceId, id, doc);
-    editor.commands.setContent(doc);
+    // 仅当用户仍停留在目标章节时才强制刷新编辑器（已切走时交给载入 effect 按需显示）
+    if (st.getSlice(instanceId).currentChapterId === id) {
+      editor.commands.setContent(doc);
+    }
   } catch (e) {
     console.error("导入当前章节失败", e);
     window.alert(e instanceof Error ? e.message : "导入失败，请重试。");

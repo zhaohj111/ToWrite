@@ -99,6 +99,16 @@ export function LorePane() {
     if (!fileId) useLoreStore.getState().ensureFile(instanceId);
   }, [instanceId, fileId]);
 
+  // 切换当前文件：清空文件级视图状态（搜索词/标签筛选/选中/编辑目标保留在上一个文件）。
+  // 否则旧文件的筛选会套到新文件上（网格被强制、结果被滤空），表现为「显示的不是目标文件」。
+  // 仅在文件真正变化时执行（挂载/主视图切换不重置）。
+  const prevFileRef = useRef(fileId);
+  useEffect(() => {
+    if (prevFileRef.current === fileId) return;
+    prevFileRef.current = fileId;
+    useLoreUiStore.getState().resetForFile(instanceId);
+  }, [instanceId, fileId]);
+
   // 搜索/标签筛选激活时结果按网格展示；布局为网格时也走网格
   const activeTags = view?.activeTags ?? [];
   const showGrid =

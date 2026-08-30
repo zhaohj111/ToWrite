@@ -158,6 +158,26 @@ export function LoreGraph({
   /** 刚完成一次框选拖拽：抑制紧随其后的 contextmenu */
   const justMarqueeRef = useRef(false);
 
+  // 切换文件：清空文件级交互状态（右键菜单/连接面板/框选/选中/连线草稿等）。
+  // 否则这些状态仍持有上一个文件的卡片 id：高亮悬空，且后续动作会用旧 id 在新文件执行
+  // （静默失败或把属于旧文件的卡片 id 写进新文件，造成「显示非目标文件」与数据污染）。
+  useEffect(() => {
+    setMenu(null);
+    setTargetId(null);
+    setRelName("");
+    setRelSearch("");
+    setConnectLine(null);
+    setMarquee(null);
+    setBoxSel(new Set());
+    setPaneMenu(null);
+    setEdgeMenu(null);
+    setEdgeDraft("");
+    setCardMenu(null);
+    setEdgeColorPicker(null);
+    setEdgeColorDraft(DEFAULT_EDGE_COLOR);
+    setSelectedEdgeId(null);
+  }, [fileId]);
+
   // —— 力导向布局：只计算没有坐标的卡片 ——
   const positions = useMemo(() => runForceLayout(cards, edges), [cards, edges]);
   const posFor = useCallback(

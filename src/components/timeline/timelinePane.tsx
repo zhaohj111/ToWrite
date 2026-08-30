@@ -288,6 +288,20 @@ function TimelineCanvas({
   /** 「替换颜色」弹窗：目标标签 id 列表 + 弹出位置 */
   const [replaceColor, setReplaceColor] = useState<{ ids: string[]; x: number; y: number } | null>(null);
 
+  // 切换文件：清空文件级瞬态状态（选中/就地编辑/框选/右键菜单/替换颜色弹窗）。
+  // 否则这些状态仍持有上一个文件的节点 id：选中高亮与菜单悬空，且后续动作会以
+  // 「新 fileId + 旧节点 id」执行（静默失败或写了错误目标），表现为「显示非目标文件」。
+  useEffect(() => {
+    setSelectedId(null);
+    setEditingId(null);
+    setEditingDraft("");
+    setBoxSel(new Set());
+    setNodeMenu(null);
+    setReplaceColor(null);
+    setMarquee(null);
+    setDragging(null);
+  }, [fileId]);
+
   const { rangeStart, rangeEnd, tickStep, nodes } = doc;
   const isNodeHidden = useCallback(
     (n: TimelineNodeData) => colorLegend.some((l) => l.color === n.color && l.hidden),

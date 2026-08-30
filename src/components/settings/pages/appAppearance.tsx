@@ -4,7 +4,7 @@
 import { SettingSelect } from "@/components/settings/controls";
 import { cn } from "@/lib/cn";
 import { computeActivityItems, resolveDefaultView, useMainViews } from "@/plugins/hooks";
-import { useLayoutStore } from "@/stores/layoutStore";
+import { useLayoutStore, type StartBackgroundMode } from "@/stores/layoutStore";
 import { usePluginStore } from "@/stores/pluginStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useThemeStore, type ThemeMode } from "@/stores/themeStore";
@@ -81,6 +81,26 @@ export function MainViewControl() {
         setSidebar(resolveDefaultView(items, id).sidebarId);
       }}
       options={views.map((v) => ({ label: v.title, value: v.id }))}
+    />
+  );
+}
+
+
+
+
+/** 开始页背景：选择器（无 / 线条（动态）/ 诗文（动态）） */
+export function StartBackgroundControl() {
+  const value = useLayoutStore((s) => s.startBackground);
+  const set = useLayoutStore((s) => s.setStartBackground);
+  return (
+    <SettingSelect
+      value={value}
+      onChange={(v) => set(v as StartBackgroundMode)}
+      options={[
+        { value: "none", label: "无" },
+        { value: "lines", label: "线条（动态）" },
+        { value: "poem", label: "诗文（动态）" },
+      ]}
     />
   );
 }

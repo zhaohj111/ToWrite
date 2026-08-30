@@ -14,6 +14,7 @@ import {
 } from "@/components/settings/pages/appGeneral";
 import {
   MainViewControl,
+  StartBackgroundControl,
   ThemeControl,
   ZoomControl,
 } from "@/components/settings/pages/appAppearance";
@@ -22,6 +23,8 @@ import { AppShortcutsList } from "@/components/settings/pages/appShortcuts";
 import { AuthorInfo, FeedbackEntry, LicenseInfo } from "@/components/settings/pages/aboutApp";
 import { UpdateControl } from "@/components/settings/pages/updateControl";
 import { ChangelogPage } from "@/components/settings/pages/changelog";
+import { SponsorPage } from "@/components/settings/pages/sponsor";
+import { SupporterListPage } from "@/components/settings/pages/supporterList";
 // 应用级更新日志：仓库根目录 CHANGELOG.md（随包打包，?raw 原样导入）
 import appChangelog from "../../../../CHANGELOG.md?raw";
 import { ProjectMetaInfo, ProjectNameField, ProjectNoteField, ProjectStats } from "@/components/settings/pages/aboutProject";
@@ -95,6 +98,7 @@ export const coreConfigModule: ModuleContract = {
           path: "应用 > 外观与界面",
           render: () => <ThemeControl />,
         },
+
         {
           id: "zoom",
           title: "界面缩放",
@@ -103,6 +107,14 @@ export const coreConfigModule: ModuleContract = {
           scope: "app",
           path: "应用 > 外观与界面",
           render: () => <ZoomControl />,
+        },        {
+          id: "startBg",
+          title: "开始页背景",
+          description: "开始页的背景效果（默认无）。",
+          keywords: ["开始页", "背景", "线条", "动画", "效果", "动态", "启动页"],
+          scope: "app",
+          path: "应用 > 外观与界面",
+          render: () => <StartBackgroundControl />,
         },
       ],
     });
@@ -243,6 +255,48 @@ export const coreConfigModule: ModuleContract = {
       items: [],
       // 自定义布局：左大纲 + 右正文（md 源为仓库根 CHANGELOG.md）
       component: () => <ChangelogPage source={appChangelog} />,
+    });
+
+    ctx.registerContribution("settings.pages", {
+      id: "about.sponsor",
+      title: "赞助支持",
+      group: "about",
+      path: "关于 > 赞助支持",
+      scope: "app",
+      // 搜索索引项（页面内容由 component 自定义布局渲染）
+      items: [
+        {
+          id: "entry",
+          title: "赞助支持",
+          description: "通过爱发电赞助作者（金额与昵称可在页面内自定义）。",
+          keywords: ["赞助", "支持", "打赏", "捐赠", "爱发电", "afdian", "ifdian", "咖啡", "coffee"],
+          scope: "app",
+          path: "关于 > 赞助支持",
+          render: () => null,
+        },
+      ],
+      component: SponsorPage,
+    });
+
+ctx.registerContribution("settings.pages", {
+      id: "about.supporter",
+      title: "支持者名单",
+      group: "about",
+      path: "关于 > 支持者名单",
+      scope: "app",
+      // 搜索索引项（页面内容由 component 自定义布局渲染）
+      items: [
+        {
+          id: "list",
+          title: "支持者名单",
+          description: "本项目赞助者名单（启动时从仓库根目录 Supporter.md 拉取，文件不存在时不显示）。",
+          keywords: ["支持者", "名单", "赞助", "supporter", "榜单", "致谢"],
+          scope: "app",
+          path: "关于 > 支持者名单",
+          render: () => null,
+        },
+      ],
+      component: SupporterListPage,
     });
 
     ctx.registerContribution("settings.pages", {

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Markdown, parseHeadings } from "@/components/ui/markdown";
 import { useUpdateStore } from "@/stores/updateStore";
+import { isDev } from "@/lib/env";
 import { cn } from "@/lib/cn";
 
 const ANCHOR_PREFIX = "changelog-heading-";
@@ -18,11 +19,17 @@ export function ChangelogPage({ source }: { source: string }) {
 
   const md = githubChangelog ?? source;
   const headings = useMemo(() => parseHeadings(md), [md]);
+  // 二级标题 = 版本条目（更新日志以 ## 记录每个版本）
+  const versionCount = useMemo(
+    () => headings.filter((h) => h.level === 2).length,
+    [headings],
+  );
   const [active, setActive] = useState(-1);
 
   // 首次打开且尚未拉取到 GitHub 版本时，后台拉取最新更新日志（失败回退随包内置，不打扰）
   useEffect(() => {
-    if (githubChangelog == null) void useUpdateStore.getState().refreshChangelog();
+    // 开发环境下仅使用随包内置版本，不触发远程拉取
+    if (!isDev && githubChangelog == null) void useUpdateStore.getState().refreshChangelog();
   }, [githubChangelog]);
 
   // 与 Markdown 渲染共用同一套标题顺序，保证锚点 id 一一对应
@@ -62,16 +69,30 @@ export function ChangelogPage({ source }: { source: string }) {
       <aside className="sticky top-0 w-52 shrink-0">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-xs text-fg-muted">大纲</span>
-          <button
-            type="button"
-            onClick={() => void useUpdateStore.getState().refreshChangelog()}
-            disabled={changelogLoading}
-            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-60"
-            title="从 GitHub 拉取最新更新日志"
-          >
-            <RefreshCw className={cn("size-3", changelogLoading && "animate-spin")} />
-            {changelogLoading ? "拉取中" : "刷新"}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <span
+              title="版本日志数量（更新日志以二级标题记录每个版本）"
+              className="rounded border border-line px-1.5 py-0.5 text-[11px] tabular-nums text-fg-muted"
+            >
+              日志数 {versionCount}
+            </span>
+            {isDev ? (
+              <span className="text-[11px] text-fg-muted/70" title="开发环境下使用随包内置更新日志">
+                内置日志
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void useUpdateStore.getState().refreshChangelog()}
+                disabled={changelogLoading}
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-60"
+                title="从 GitHub 拉取最新更新日志"
+              >
+                <RefreshCw className={cn("size-3", changelogLoading && "animate-spin")} />
+                {changelogLoading ? "拉取中" : "刷新"}
+              </button>
+            )}
+          </div>
         </div>
         {changelogError && (
           <p className="mb-1.5 text-[11px] leading-snug text-danger" title={changelogError}>

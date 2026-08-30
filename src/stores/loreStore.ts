@@ -637,8 +637,13 @@ export const useLoreStore = create<LoreState>((set, get) => ({
     if (stack.length === 0) return;
     const prev = stack[stack.length - 1];
     const cur = get().collectDoc(instanceId);
+    const curSlice = get().slices[instanceId] ?? EMPTY_LORE_SLICE;
     set((s) => ({
-      slices: { ...s.slices, [instanceId]: loreDocToSlice(prev) },
+      slices: {
+        ...s.slices,
+        // 撤销/重做不改变当前文件选中与打开的标签（目标文件已不存在时回退补位）
+        [instanceId]: keepCurrentFile(loreDocToSlice(prev), curSlice),
+      },
       undoStacks: { ...s.undoStacks, [instanceId]: stack.slice(0, -1) },
       redoStacks: {
         ...s.redoStacks,
@@ -652,8 +657,13 @@ export const useLoreStore = create<LoreState>((set, get) => ({
     if (stack.length === 0) return;
     const next = stack[stack.length - 1];
     const cur = get().collectDoc(instanceId);
+    const curSlice = get().slices[instanceId] ?? EMPTY_LORE_SLICE;
     set((s) => ({
-      slices: { ...s.slices, [instanceId]: loreDocToSlice(next) },
+      slices: {
+        ...s.slices,
+        // 撤销/重做不改变当前文件选中与打开的标签（目标文件已不存在时回退补位）
+        [instanceId]: keepCurrentFile(loreDocToSlice(next), curSlice),
+      },
       undoStacks: {
         ...s.undoStacks,
         [instanceId]: [...(s.undoStacks[instanceId] ?? []), cur].slice(-UNDO_LIMIT),
@@ -677,6 +687,21 @@ function loreDocToSlice(doc: LoreDoc): LoreSlice {
     tags: norm.tags,
     currentFileId: current,
     openTabs: current ? [current] : [],
+  };
+}
+
+/** 撤销/重做后保留当前文件选中与打开的标签：目标文件在恢复结果中不存在时回退到首个文件 */
+function keepCurrentFile(restored: LoreSlice, cur: LoreSlice): LoreSlice {
+  const ids = new Set(restored.files.map((f) => f.id));
+  const currentFileId =
+    cur.currentFileId && ids.has(cur.currentFileId)
+      ? cur.currentFileId
+      : restored.files[0]?.id ?? null;
+  const openTabs = cur.openTabs.filter((t) => ids.has(t));
+  return {
+    ...restored,
+    currentFileId,
+    openTabs: openTabs.length > 0 ? openTabs : currentFileId ? [currentFileId] : [],
   };
 }
 

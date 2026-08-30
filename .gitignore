@@ -9,6 +9,7 @@ src-tauri/gen/
 # Editor
 .vscode/
 .idea/
+tools/
 *.suo
 
 # OS
@@ -26,3 +27,5 @@ skills-lock.yaml
 # MD
 ToWrite.md
 PluginSystem.md
+UpdatePlan.md
+Supporter.md

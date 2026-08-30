@@ -30,7 +30,8 @@ pub fn run() {
             pdf_export::export_image_pdf,
             updater::check_update,
             updater::download_update,
-            updater::fetch_changelog
+            updater::fetch_changelog,
+            updater::fetch_supporter
         ])
         .setup(|app| {
             // 启动默认最大化（非全屏）：窗口先隐藏再最大化并展示，避免闪烁。

@@ -185,13 +185,9 @@ pub async fn check_update(app: AppHandle) -> Result<UpdateInfo, String> {
     })
 }
 
-/// 从 GitHub 默认分支拉取仓库根目录的 CHANGELOG.md（检查更新时前端一并调用，覆盖随包内置的旧版）。
-/// bytes() 不依赖 charset feature（当前仅启用 json+native-tls），UTF-8 文本直接转 String。
-#[tauri::command]
-pub async fn fetch_changelog(app: AppHandle) -> Result<String, String> {
-    let current = app.package_info().version.to_string();
-    let client = client(&current);
-    let meta: RepoMeta = client
+/// 拉取仓库元信息（默认分支，供拉取 CHANGELOG.md / Supporter.md 使用）
+async fn fetch_repo_meta(client: &reqwest::Client) -> Result<RepoMeta, String> {
+    client
         .get(REPO_API_URL)
         .send()
         .await
@@ -200,7 +196,16 @@ pub async fn fetch_changelog(app: AppHandle) -> Result<String, String> {
         .map_err(|e| format!("获取仓库信息失败：{e}"))?
         .json()
         .await
-        .map_err(|e| format!("解析仓库信息失败：{e}"))?;
+        .map_err(|e| format!("解析仓库信息失败：{e}"))
+}
+
+/// 从 GitHub 默认分支拉取仓库根目录的 CHANGELOG.md（检查更新时前端一并调用，覆盖随包内置的旧版）。
+/// bytes() 不依赖 charset feature（当前仅启用 json+native-tls），UTF-8 文本直接转 String。
+#[tauri::command]
+pub async fn fetch_changelog(app: AppHandle) -> Result<String, String> {
+    let current = app.package_info().version.to_string();
+    let client = client(&current);
+    let meta = fetch_repo_meta(&client).await?;
     let url = format!("{RAW_PREFIX}/{}/CHANGELOG.md", meta.default_branch);
     let bytes = client
         .get(&url)
@@ -213,6 +218,31 @@ pub async fn fetch_changelog(app: AppHandle) -> Result<String, String> {
         .await
         .map_err(|e| format!("读取更新日志失败：{e}"))?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// 从 GitHub 默认分支拉取仓库根目录的 Supporter.md（赞助页「支持者名单」）。
+/// 文件不存在（404）返回 None：前端据此不显示名单区域。
+#[tauri::command]
+pub async fn fetch_supporter(app: AppHandle) -> Result<Option<String>, String> {
+    let current = app.package_info().version.to_string();
+    let client = client(&current);
+    let meta = fetch_repo_meta(&client).await?;
+    let url = format!("{RAW_PREFIX}/{}/Supporter.md", meta.default_branch);
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("下载支持者名单失败：{e}"))?;
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    let bytes = resp
+        .error_for_status()
+        .map_err(|e| format!("下载支持者名单失败：{e}"))?
+        .bytes()
+        .await
+        .map_err(|e| format!("读取支持者名单失败：{e}"))?;
+    Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
 }
 
 /// 下载最新 Windows 安装包到应用数据目录（updates/），完成后打开并返回文件路径。

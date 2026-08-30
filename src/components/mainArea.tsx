@@ -2,7 +2,7 @@
 // 顶部标签栏按“当前插件下的文件”渲染：正文类实例显示该实例最近打开的章节标签，
 // 其他实例显示其自身标签；插件切换由左侧 Activity Bar 完成。
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   BookMarked,
@@ -85,7 +85,7 @@ export function MainArea() {
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <div className="flex h-10 shrink-0 items-end gap-0.5 overflow-x-auto overflow-y-hidden border-b border-line/60 bg-app px-2 pt-2">
+      <TabStrip>
         {active?.prototypeId === "core.editor" ? (
           <EditorTabs instanceId={active.instanceId} />
         ) : active?.prototypeId === "core.timeline" ? (
@@ -100,7 +100,7 @@ export function MainArea() {
             </div>
           )
         )}
-      </div>
+      </TabStrip>
         {/* 时间轴工具行：文件标签下方（间距与编辑器工具栏一致）。
             概览/适应已移至画布左下角缩放控件，此处保留图例开关与颜色管理（含当前使用颜色指示）。 */}
         {active?.prototypeId === "core.timeline" && (
@@ -228,6 +228,70 @@ export function MainArea() {
           <TagManager instanceId={active.instanceId} onClose={() => setTagOpen(false)} />
         )}
       </div>
+    </div>
+  );
+}
+
+/** 主体区域文件标签条（所有插件变体共用）：
+ *  隐藏滚动条 + 左键拖动横向滚动（WebView2 下与侧栏同款 pointer 方案）；
+ *  拖动超过 4px 判定为滚动，吞掉释放时的 click，避免误切换文件。 */
+function TabStrip({ children }: { children: ReactNode }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ startClientX: number; startLeft: number; moved: boolean } | null>(null);
+  const suppressClickRef = useRef(false);
+
+  const startDrag = (e: React.PointerEvent) => {
+    if (e.button !== 0 || e.pointerType !== "mouse") return;
+    // 关闭等交互控件上不启动拖动（其上点击仍交给各自 onClick）
+    if ((e.target as HTMLElement).closest("button, input, a")) return;
+    suppressClickRef.current = false;
+    const el = scrollRef.current;
+    dragRef.current = { startClientX: e.clientX, startLeft: el?.scrollLeft ?? 0, moved: false };
+  };
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const dx = e.clientX - d.startClientX;
+      if (!d.moved && Math.abs(dx) < 4) return; // 4px 判定为点击
+      d.moved = true;
+      const el = scrollRef.current;
+      if (el) el.scrollLeft = d.startLeft - dx;
+    };
+    const onUp = () => {
+      const d = dragRef.current;
+      if (d && d.moved) {
+        suppressClickRef.current = true; // 拖拽释放后吞掉这次 release click
+        // 兜底：释放后没有紧跟 click（拖出标签条释放）时，标志不能滞留，
+        // 否则下一次点标签/关闭按钮会被误吞（表现为「点了没切换」）
+        window.setTimeout(() => {
+          suppressClickRef.current = false;
+        }, 150);
+      }
+      dragRef.current = null;
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, []);
+
+  return (
+    <div
+      ref={scrollRef}
+      onPointerDown={startDrag}
+      onClickCapture={(e) => {
+        if (suppressClickRef.current) {
+          suppressClickRef.current = false;
+          e.stopPropagation();
+        }
+      }}
+      className="hidden-scrollbar flex h-10 shrink-0 cursor-grab items-end gap-0.5 overflow-x-auto overflow-y-hidden border-b border-line/60 bg-app px-2 pt-2 active:cursor-grabbing"
+    >
+      {children}
     </div>
   );
 }

@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ChevronsDown,
+  ChevronsUp,
   BookOpenText,
   FilePlus2,
   FileText,
@@ -35,6 +37,8 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { UpdateBadge } from "@/components/updateBadge";
 import { cn } from "@/lib/cn";
+import { LineFlowBackground } from "@/components/lineFlowBackground";
+import { PoemFlowBackground } from "@/components/poemFlowBackground";
 import type { ProjectMeta } from "@/types/writeproj";
 
 function formatTime(iso: string): string {
@@ -86,6 +90,8 @@ export function StartPage() {
   // 外层页是标题收缩的驱动滚动容器（非工程区域）；工程区内部滚动独立，不影响缩放。
   const pageRef = useRef<HTMLDivElement>(null);
   const [shrink, setShrink] = useState(0);
+  // 标题区域展开/锁定：展开到窗口高度后不再随滚动收缩
+  const [titleExpanded, setTitleExpanded] = useState(false);
   useEffect(() => {
     const el = pageRef.current;
     if (!el) return;
@@ -105,8 +111,10 @@ export function StartPage() {
     };
   }, []);
 
-  const titleSize = 48 - 14 * shrink; // 48 → 34（当前大小为最小值）
-  const subSize = 18 - 4 * shrink; // 18 → 14
+
+  // 展开锁定时字体大小一并锁定（不随滚动收缩）；默认高度时随滚动收缩（48 → 34）
+  const titleSize = titleExpanded ? 48 : 48 - 14 * shrink;
+  const subSize = titleExpanded ? 18 : 18 - 4 * shrink; // 18 → 14
   // 头部整体高度：未滚动时项目管理顶部约在窗口 2/3，滚动后收缩到最小 1/5 窗口高度
   const headerHeight = `calc((${66}vh - ${OPS_H}px) * ${1 - shrink} + ${20}vh * ${shrink})`;
 
@@ -153,13 +161,16 @@ export function StartPage() {
 
   return (
     <div ref={pageRef} className="hidden-scrollbar h-full overflow-y-auto">
+      {/* 开始页背景（线条束流动；设置-外观与界面 可选，默认无） */}
+      <LineFlowBackground />
+      <PoemFlowBackground />
       {/* ===== 固定可视区（sticky 钉在窗口顶部）：标题 + 操作栏 + 工程区。
            外层页（非工程区域）滚动驱动标题收缩；工程区内部独立滚动，不影响缩放。 ===== */}
       <div className="sticky top-0 flex h-full flex-col">
       {/* ===== 页头：轮转品牌标题（布局顶部固定、非悬浮，随外层页滚动收缩） ===== */}
       <header
         className="anim-rise flex shrink-0 flex-col items-center justify-center"
-        style={{ height: headerHeight }}
+        style={{ height: titleExpanded ? "100%" : headerHeight, transition: "height 0.5s var(--ease-out-expo)" }}
       >
         <h1
           className="w-full text-center font-display font-bold tracking-[0.16em] text-fg-strong"
@@ -176,6 +187,21 @@ export function StartPage() {
             initialDelayMs={2200}
           />
         </p>
+        {/* 标题区展开/锁定：展开为窗口高度并锁定，图标切换为向上闪烁；再次点击恢复默认 */}
+        <button
+          type="button"
+          onClick={() => setTitleExpanded((v) => !v)}
+          title={titleExpanded ? "收起标题（恢复默认高度）" : "展开标题（占满窗口并锁定）"}
+          className={cn(
+            "anim-blink mt-4 flex size-9 items-center justify-center rounded-full text-fg-muted transition-colors",
+            // 仅默认高度（未展开、未滚动收缩）显示向下键；展开锁定显示向上键；其余状态隐藏
+            titleExpanded || shrink === 0
+              ? "hover:bg-hover hover:text-fg"
+              : "pointer-events-none !opacity-0 [animation:none]",
+          )}
+        >
+          {titleExpanded ? <ChevronsUp className="size-4" /> : <ChevronsDown className="size-4" />}
+        </button>
       </header>
 
       {/* ===== 操作栏（固定高度，始终可见） ===== */}
@@ -446,7 +472,7 @@ function ProjectCard({
       className="card group flex cursor-pointer items-center gap-3.5 p-4"
       onClick={onOpen}
     >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-accent/20 bg-accent-soft">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-accent/20 bg-transparent transition-colors group-hover:bg-accent-soft">
         <FileText className="size-4.5 text-accent" />
       </div>
       <div className="min-w-0 flex-1">
@@ -506,7 +532,7 @@ function ProjectMenu({
       <DropdownMenuTrigger asChild>
         <button
           title="更多操作"
-          className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted opacity-0 transition-all hover:bg-hover hover:text-fg group-hover:opacity-100 data-[state=open]:opacity-100"
+          className="flex h-7 w-7 items-center justify-center rounded-md border border-current bg-transparent text-fg-muted transition-all hover:bg-hover hover:text-fg data-[state=open]:bg-hover"
           onClick={(e) => e.stopPropagation()}
         >
           <MoreHorizontal className="size-4" />

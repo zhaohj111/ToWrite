@@ -121,3 +121,8 @@ export function downloadUpdate(): Promise<string> {
 export function fetchChangelog(): Promise<string> {
   return invoke<string>("fetch_changelog");
 }
+
+/** 从 GitHub 默认分支拉取仓库根目录 Supporter.md（赞助页「支持者名单」）；文件不存在返回 null */
+export function fetchSupporter(): Promise<string | null> {
+  return invoke<string | null>("fetch_supporter");
+}

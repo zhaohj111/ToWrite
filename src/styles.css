@@ -265,7 +265,8 @@ textarea,
 
 /* 悬停抬升的卡片 */
 .card {
-  background: var(--color-panel);
+  /* 未悬浮：透明背景（含图标背景由组件控制），仅保留描边；悬停恢复面板底色 + 阴影 */
+  background: transparent;
   border: 1px solid var(--color-line);
   border-radius: var(--radius-md);
   transition:
@@ -350,6 +351,14 @@ textarea,
 .anim-page { animation: page-in 0.42s var(--ease-out-expo) both; }
 .anim-tab { animation: tab-in 0.22s var(--ease-out-expo) both; }
 .anim-num { animation: num-in 0.16s var(--ease-out-expo) both; }
+/* 标题区箭头闪烁：缓慢呼吸式亮暗 */
+@keyframes tw-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.anim-blink {
+  animation: tw-blink 1.3s ease-in-out infinite;
+}
 .delay-1 { animation-delay: 60ms; }
 .delay-2 { animation-delay: 120ms; }
 .delay-3 { animation-delay: 180ms; }
@@ -611,4 +620,16 @@ select {
     opacity: 1;
     transform: none;
   }
+}
+
+/* ================================================================
+   开始页诗文背景字体（令东齐伋体 · 按诗文用字子集化）
+   新增/修改诗句后重跑 tools/subset-poem-font.mjs 重新生成
+   ================================================================ */
+@font-face {
+  font-family: "Qiji Combo Poem";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/qiji-combo-poem.woff2") format("woff2");
 }

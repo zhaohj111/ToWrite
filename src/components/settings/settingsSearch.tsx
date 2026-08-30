@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CornerDownLeft, Search } from "lucide-react";
 import { pluginRegistry } from "@/plugins/registry";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { useSupporterAvailable } from "@/stores/updateStore";
 import type { SettingItemMeta, SettingsPageContribution } from "@/types/settings";
 import { cn } from "@/lib/cn";
 
@@ -20,14 +21,16 @@ export function SettingsSearch({
   onPick: (page: SettingsPageContribution, itemId: string) => void;
 }) {
   const hasProject = !!useWorkspaceStore((s) => s.project);
+  const supporterAvailable = useSupporterAvailable();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
 
   // 插件自有设置页（prototypeId）不参与全局搜索：只能从其插件详情的「配置」tab 进入
+  // 支持者名单页：无 Supporter.md（或尚未完成启动检查）时不参与搜索
   const pages = pluginRegistry
     .getContributions("settings.pages")
-    .filter((p) => !p.prototypeId);
+    .filter((p) => !p.prototypeId && (p.id !== "about.supporter" || supporterAvailable));
 
   const hits = useMemo<Hit[]>(() => {
     const q = query.trim().toLowerCase();

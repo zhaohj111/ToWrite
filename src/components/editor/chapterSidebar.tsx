@@ -228,6 +228,10 @@ export function ChapterSidebar() {
           }
         }
         suppressClickRef.current = true; // 拖拽释放后吞掉这次 click，避免误选中/误折叠
+        // 兜底：释放后没有紧跟 click（拖出列表释放）时不能滞留，否则下一次点击会被误吞（表现为「点了没切换」）
+        window.setTimeout(() => {
+          suppressClickRef.current = false;
+        }, 150);
       }
       pendingRef.current = null;
       dragRef.current = null;

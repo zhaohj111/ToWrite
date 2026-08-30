@@ -5,9 +5,20 @@
 
 import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
-import { checkUpdate, downloadUpdate, fetchChangelog, isTauri } from "@/lib/tauri";
+import { checkUpdate, downloadUpdate, fetchChangelog, fetchSupporter, isTauri } from "@/lib/tauri";
+import { isDev } from "@/lib/env";
 import { getSetting, setSetting } from "@/lib/settings";
 import { notifyError, notifySuccess } from "@/lib/notify";
+
+/**
+ * 本地支持者名单（仓库根目录 Supporter.md）：仅开发/测试环境读取，文件不存在则为空。
+ * 用动态 glob（import.meta.glob + ?raw）：文件缺失不导致构建失败（该场景即「无文件不显示」）。
+ */
+const localSupporterModules = import.meta.glob<string>("../../Supporter.md", {
+  query: "?raw",
+  import: "default",
+});
+const LOCAL_SUPPORTER_KEY = "../../Supporter.md";
 
 const KEY_AUTO_CHECK = "updateAutoCheck";
 
@@ -42,12 +53,19 @@ interface UpdateState {
   changelog: string | null;
   changelogLoading: boolean;
   changelogError: string | null;
+  /** GitHub 拉取的仓库根目录 Supporter.md；null = 未拉取/文件不存在（不显示名单） */
+  supporter: string | null;
+  supporterLoading: boolean;
+  /** 是否已完成启动检查（含「文件不存在」结果），赞助页据此决定是否显示名单区 */
+  supporterChecked: boolean;
   init: () => Promise<void>;
   setAutoCheck: (v: boolean) => void;
   checkNow: () => Promise<void>;
   download: () => Promise<void>;
   /** 重新从 GitHub 默认分支拉取 CHANGELOG.md（更新日志页「刷新」/ 首次打开触发） */
   refreshChangelog: () => Promise<void>;
+  /** 启动时检查仓库根目录 Supporter.md 并拉取（开发环境读本地文件；文件不存在则不显示名单） */
+  fetchSupporter: () => Promise<void>;
 }
 
 export const useUpdateStore = create<UpdateState>((set, get) => ({
@@ -63,14 +81,24 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   changelog: null,
   changelogLoading: false,
   changelogError: null,
+  supporter: null,
+  supporterLoading: false,
+  supporterChecked: false,
 
   init: async () => {
     const autoCheck = await getSetting<boolean>(KEY_AUTO_CHECK, false);
     set({ autoCheck });
     await ensureProgressListener();
     if (autoCheck) {
-      // 延迟自动检查，避免挤占启动时其他初始化
-      window.setTimeout(() => void get().checkNow(), 2500);
+      // 延迟自动检查，避免挤占启动时其他初始化；支持者名单排队在检查更新之后
+      window.setTimeout(() => {
+        void get()
+          .checkNow()
+          .then(() => get().fetchSupporter());
+      }, 2500);
+    } else {
+      // 未启用自动检查更新：启动时仍检查并拉取支持者名单
+      window.setTimeout(() => void get().fetchSupporter(), 2500);
     }
   },
 
@@ -104,6 +132,8 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   },
 
   refreshChangelog: async () => {
+    // 开发环境下只使用随包内置更新日志，不拉取远程（GitHub）内容
+    if (isDev) return;
     if (!isTauri()) return;
     if (get().changelogLoading) return;
     set({ changelogLoading: true, changelogError: null });
@@ -115,6 +145,35 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         changelogLoading: false,
         changelogError: e instanceof Error ? e.message : String(e),
       });
+    }
+  },
+  fetchSupporter: async () => {
+    // 每次会话只检查一次（启动时发起；「文件不存在」也视为已完成检查）
+    if (get().supporterLoading || get().supporterChecked) return;
+    // 开发/测试环境：读取本地仓库根目录 Supporter.md，不拉远程；文件不存在则不显示名单
+    if (isDev) {
+      set({ supporterLoading: true });
+      try {
+        const load = localSupporterModules[LOCAL_SUPPORTER_KEY];
+        if (load) {
+          set({ supporter: await load(), supporterLoading: false, supporterChecked: true });
+        } else {
+          set({ supporter: null, supporterLoading: false, supporterChecked: true });
+        }
+      } catch (e) {
+        console.warn("读取本地支持者名单失败", e);
+        set({ supporter: null, supporterLoading: false, supporterChecked: true });
+      }
+      return;
+    }
+    if (!isTauri()) return;
+    set({ supporterLoading: true });
+    try {
+      const md = await fetchSupporter();
+      set({ supporter: md, supporterLoading: false, supporterChecked: true });
+    } catch (e) {
+      console.warn("拉取支持者名单失败", e);
+      set({ supporter: null, supporterLoading: false, supporterChecked: true });
     }
   },
 
@@ -143,4 +202,10 @@ async function ensureProgressListener(): Promise<void> {
   await listen<DownloadProgressPayload>("update://progress", (e) => {
     useUpdateStore.setState({ progress: e.payload });
   });
+}
+/** 支持者名单是否可用（启动检查完成且文件存在）：设置导航据此显示「支持者名单」页 */
+export function useSupporterAvailable(): boolean {
+  const supporter = useUpdateStore((s) => s.supporter);
+  const checked = useUpdateStore((s) => s.supporterChecked);
+  return checked && supporter != null;
 }

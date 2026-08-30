@@ -71,6 +71,8 @@ interface LoreUiState {
   edgeLabelColor: string;
   reset: () => void;
   getSlice: (instanceId: string) => LoreUiSlice;
+  /** 切换文件时清空文件级视图状态（搜索/标签筛选/选中/编辑目标），保留布局偏好；不入历史 */
+  resetForFile: (instanceId: string) => void;
   /** 启动时初始化缺省颜色（颜色已改为工程隔离，不再从 config.json 读取） */
   init: () => Promise<void>;
   /** 打开工程：从工程持久化颜色恢复（实例 id -> 当前连线/关系文本颜色） */
@@ -112,6 +114,30 @@ export const useLoreUiStore = create<LoreUiState>((set, get) => ({
     }),
 
   getSlice: (instanceId) => get().slices[instanceId] ?? EMPTY_LORE_UI_SLICE,
+
+  resetForFile: (instanceId) =>
+    set((s) => {
+      const slice = s.slices[instanceId];
+      if (!slice) return s;
+      const view = slice.view;
+      if (
+        view.query === "" &&
+        view.activeTags.length === 0 &&
+        view.selectedCardId === null &&
+        view.editingId === null
+      ) {
+        return s;
+      }
+      return {
+        slices: {
+          ...s.slices,
+          [instanceId]: {
+            ...slice,
+            view: { ...view, query: "", activeTags: [], selectedCardId: null, editingId: null },
+          },
+        },
+      };
+    }),
 
   init: async () => {
     // 颜色已改为工程隔离（settingsStore.instanceSettings），此处仅初始化默认色

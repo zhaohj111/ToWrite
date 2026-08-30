@@ -222,6 +222,10 @@ export function EditorPane() {
   useSettingsStore();
   const fontSize = (resolveSetting(EDITOR_PROTOTYPE, instanceId, "fontSize") as number) ?? DEFAULT_FONT_SIZE;
   const prevIdRef = useRef<string | null>(null);
+  // 编辑器「实际加载的章节」：由载入 effect 维护。onUpdate 写回必须以它为写入目标——
+  // 切换章节的瞬间 store 的 currentChapterId 已是新章，而编辑器主体仍是旧章内容；
+  // 若用实时 currentChapterId 写回，会把旧章内容写进新章（切回后显示串章 bug）。
+  const loadedIdRef = useRef<string | null>(null);
   // 右键菜单（null = 未打开）
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
@@ -233,8 +237,8 @@ export function EditorPane() {
     editable: !!currentId,
     onUpdate: ({ editor: instance }) => {
       const st = useEditorStore.getState();
-      const cur = st.getSlice(instanceId);
-      if (cur.currentChapterId) st.setContent(instanceId, cur.currentChapterId, instance.getJSON());
+      const target = loadedIdRef.current ?? st.getSlice(instanceId).currentChapterId;
+      if (target) st.setContent(instanceId, target, instance.getJSON());
     },
     editorProps: {
       attributes: { class: "h-full" },
@@ -272,16 +276,23 @@ export function EditorPane() {
 
   // 只读/可编辑随当前章节切换：tiptap 的 useEditor（空依赖）不会跟随 options.editable 变更，
   // 需显式调用 setEditable。否则「先无章节后选中章节」时编辑器一直只读（也无法拖表格列宽）。
+  // 第二参 emitUpdate 必须为 false：setEditable 会无条件 emit('update')，若在载入 effect 之前触发
+  // onUpdate 写回，会把旧章节内容写进新章节的 store（切换章节后显示非目标文件的根因之一）。
   useEffect(() => {
     if (!editor) return;
-    editor.setEditable(!!currentId);
+    editor.setEditable(!!currentId, false);
   }, [editor, currentId]);
 
-  // 切换章节时载入对应内容（用 prevIdRef 防止每次输入触发重载）
+  // 切换章节时载入对应内容（用 prevIdRef 防止每次输入触发重载）。
+  // 内容直接从 store 取最新值（而非本帧闭包）：切换瞬间若有并发的写回，
+  // 保证加载到的是目标章节当前存储的内容，绝不加载被上一帧闭包截留的旧文档。
   useEffect(() => {
     if (!editor || prevIdRef.current === currentId) return;
     prevIdRef.current = currentId;
-    const doc = currentId ? contents[currentId] ?? emptyChapterDoc() : emptyChapterDoc();
+    loadedIdRef.current = currentId;
+    const st = useEditorStore.getState();
+    const storedContents = st.getSlice(instanceId).contents;
+    const doc = currentId ? storedContents[currentId] ?? emptyChapterDoc() : emptyChapterDoc();
     editor.commands.setContent(doc, false);
   }, [editor, currentId, contents]);
 
