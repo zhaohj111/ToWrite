@@ -2,7 +2,7 @@
 // 顶部标签栏按“当前插件下的文件”渲染：正文类实例显示该实例最近打开的章节标签，
 // 其他实例显示其自身标签；插件切换由左侧 Activity Bar 完成。
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   BookMarked,
@@ -10,6 +10,7 @@ import {
   FileText,
   Grid3x3,
   Layers,
+  Link2,
   Palette,
   Redo2,
   Share2,
@@ -21,13 +22,16 @@ import { useMainViews } from "@/plugins/hooks";
 import { useLayoutStore } from "@/stores/layoutStore";
 import { useEditorStore, EMPTY_SLICE } from "@/stores/editorStore";
 import { useTimelineStore, EMPTY_TIMELINE_SLICE } from "@/stores/timelineStore";
+import { useAssociationStore } from "@/stores/associationStore";
 import { useTimelineUiStore } from "@/stores/timelineUiStore";
 import { useLoreStore, EMPTY_LORE_SLICE } from "@/stores/loreStore";
 import { useLoreUiStore } from "@/stores/loreUiStore";
 import { EditorInstanceProvider } from "@/components/editor/editorInstanceContext";
 import { requestLoreRedo, requestLoreUndo } from "@/lib/loreBus";
 import { requestTimelineUndo, requestTimelineRedo } from "@/lib/timelineBus";
+import { getCardRefsForTimelineFile, openLoreFromTimelineCard } from "@/lib/associationUtils";
 import { LegendManager } from "@/components/timeline/legendManager";
+import { TimelineAssociationPanel } from "@/components/timeline/timelineAssociationPanel";
 import { TagManager } from "@/components/lore/tagManager";
 import { ColorPickerPanel } from "@/components/ui/colorPicker";
 import { cn } from "@/lib/cn";
@@ -40,6 +44,36 @@ export function MainArea() {
   const [legendOpen, setLegendOpen] = useState(false);
   const [tagOpen, setTagOpen] = useState(false);
   const legendVisible = useTimelineUiStore((s) => s.legendVisible);
+
+  // —— 时间轴关联 chips 横向滚动（隐藏滚动条 + 左键拖动） ——
+  const timelineChipsRef = useRef<HTMLDivElement>(null);
+  const timelineChipsDragRef = useRef<{ startClientX: number; startLeft: number; moved: boolean } | null>(null);
+  const startTimelineChipsDrag = (e: React.PointerEvent) => {
+    if (e.button !== 0 || e.pointerType !== "mouse") return;
+    if ((e.target as HTMLElement).closest("button, input")) return;
+    const el = timelineChipsRef.current;
+    timelineChipsDragRef.current = { startClientX: e.clientX, startLeft: el?.scrollLeft ?? 0, moved: false };
+  };
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const d = timelineChipsDragRef.current;
+      if (!d) return;
+      const dx = e.clientX - d.startClientX;
+      if (!d.moved && Math.abs(dx) < 4) return;
+      d.moved = true;
+      const el = timelineChipsRef.current;
+      if (el) el.scrollLeft = d.startLeft - dx;
+    };
+    const onUp = () => { timelineChipsDragRef.current = null; };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, []);
+    const [assocOpen, setAssocOpen] = useState(false);
   const setLegendVisible = useTimelineUiStore((s) => s.setLegendVisible);
   const setLoreLayout = useLoreUiStore((s) => s.setLayout);
   // 布局以「图」为缺省，且计入「搜索/标签筛选强制网格」：
@@ -77,9 +111,18 @@ export function MainArea() {
   );
   const timelineCurrentColorResolved = timelineCurrentColor ?? timelineLegendFirst ?? "#d7b25c";
 
+    const timelineFileId = useTimelineStore((s) =>
+      active?.prototypeId === "core.timeline" ? s.slices[active.instanceId]?.currentFileId ?? null : null,
+    );
+    const timelineAssocMap = useAssociationStore((s) => s.timelineToLore);
+    const timelineAssocCards = useMemo(() =>
+      timelineFileId ? getCardRefsForTimelineFile(timelineFileId) : [],
+      [timelineFileId, timelineAssocMap],
+    );
   // 切换主视图时关闭图例/标签管理面板
   useEffect(() => {
     setLegendOpen(false);
+    setAssocOpen(false);
     setTagOpen(false);
   }, [active?.id]);
 
@@ -149,9 +192,36 @@ export function MainArea() {
                 style={{ background: timelineCurrentColorResolved }}
               />
             </button>
-          </div>
+              <button
+                title="关联管理"
+                onClick={() => setAssocOpen((v) => !v)}
+                className={cn(
+                  "flex h-7 w-7 items-center justify-center rounded-md transition-all duration-150 active:scale-95",
+                  assocOpen ? "bg-accent-soft text-accent" : "text-fg-muted hover:bg-hover hover:text-fg",
+                )}
+              >
+                <Link2 className="size-4" />
+              </button>
+            </div>
         )}
         {/* 设定库工具行：撤销/重做在最左，其后为布局切换 / 连线颜色 / 关系文本颜色 / 标签管理 */}
+          {active?.prototypeId === "core.timeline" && timelineFileId && (
+            <div ref={timelineChipsRef} onPointerDown={startTimelineChipsDrag} className="hidden-scrollbar flex h-10 shrink-0 cursor-grab items-center gap-1 overflow-x-auto border-b border-line/60 bg-app px-3 active:cursor-grabbing">
+              {timelineAssocCards.length === 0 ? (
+                <span className="whitespace-nowrap text-[11px] text-fg-muted/60">暂无关联设定</span>
+              ) : timelineAssocCards.map((c) => (
+                <button
+                  key={c.cardId}
+                  title={`打开设定「${c.title}」`}
+                  onClick={() => openLoreFromTimelineCard(c.cardId)}
+                  className="flex shrink-0 items-center gap-1 rounded bg-accent-soft px-2 py-1 text-[11px] font-medium text-accent transition-opacity hover:opacity-80"
+                >
+                  <Link2 className="size-3" />
+                  {c.title}
+                </button>
+              ))}
+            </div>
+          )}
         {active?.prototypeId === "core.lore" && (
           <div className="flex h-10 shrink-0 items-center gap-0.5 border-b border-line/60 bg-app px-2">
             <button
@@ -228,6 +298,13 @@ export function MainArea() {
           <TagManager instanceId={active.instanceId} onClose={() => setTagOpen(false)} />
         )}
       </div>
+          {active?.prototypeId === "core.timeline" && assocOpen && timelineFileId && (
+            <TimelineAssociationPanel
+              instanceId={active.instanceId}
+              fileId={timelineFileId}
+              onClose={() => setAssocOpen(false)}
+            />
+          )}
     </div>
   );
 }

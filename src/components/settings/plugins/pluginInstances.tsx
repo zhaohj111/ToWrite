@@ -14,6 +14,7 @@ import {
 import { useEditorStore } from "@/stores/editorStore";
 import { useTimelineStore } from "@/stores/timelineStore";
 import { useLoreStore, LORE_PROTOTYPE } from "@/stores/loreStore";
+import { useAssociationStore } from "@/stores/associationStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { cn } from "@/lib/cn";
 import { SettingToggle } from "@/components/settings/controls";
@@ -35,6 +36,22 @@ function instanceDataLabel(prototypeId: string): string {
   if (prototypeId === TIMELINE_PROTOTYPE) return "时间轴文件与节点";
   if (prototypeId === LORE_PROTOTYPE) return "设定库卡片与连线";
   return "全部相关数据";
+}
+
+/** 实例删除时将被级联解除的关联数（按唯一的 文件-卡片 对去重） */
+function instanceAssocPairCount(inst: PluginInstance): number {
+  const pairs = new Set<string>();
+  const tl = useTimelineStore.getState().getSlice(inst.id);
+  for (const f of tl.files) {
+    for (const cardId of useAssociationStore.getState().getCardsForFile(f.id)) pairs.add(`${f.id}:${cardId}`);
+  }
+  const lo = useLoreStore.getState().getSlice(inst.id);
+  for (const f of lo.files) {
+    for (const c of lo.docs[f.id]?.cards ?? []) {
+      for (const fileId of useAssociationStore.getState().getFilesForCard(c.id)) pairs.add(`${fileId}:${c.id}`);
+    }
+  }
+  return pairs.size;
 }
 
 export function PluginInstances() {
@@ -62,6 +79,10 @@ export function PluginInstances() {
     const inst = confirmRemove;
     if (!inst) return;
     const id = inst.id;
+    const tlFileIds = useTimelineStore.getState().getSlice(id).files.map((f) => f.id);
+    const loCardIds = useLoreStore.getState().getSlice(id).files.flatMap((f) => (useLoreStore.getState().getSlice(id).docs[f.id]?.cards ?? []).map((c) => c.id));
+    useAssociationStore.getState().removeTimelineFiles(tlFileIds);
+    useAssociationStore.getState().removeCards(loCardIds);
     removeInstance(id);
     useEditorStore.getState().removeSlice(id);
     useTimelineStore.getState().removeSlice(id);
@@ -254,6 +275,7 @@ export function PluginInstances() {
               确定删除实例「{confirmRemove?.name}」？该实例的
               {confirmRemove ? instanceDataLabel(confirmRemove.prototypeId) : ""}
               将一并删除，且无法撤销。
+                {confirmRemove && instanceAssocPairCount(confirmRemove) > 0 && `同时将解除 ${instanceAssocPairCount(confirmRemove)} 条关联。`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

@@ -5,6 +5,7 @@ import { saveProject } from "@/lib/tauri";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { useEditorStore } from "@/stores/editorStore";
 import { useTimelineStore } from "@/stores/timelineStore";
+import { useAssociationStore } from "@/stores/associationStore";
 import { LORE_PROTOTYPE, useLoreStore } from "@/stores/loreStore";
 import { usePluginStore, EDITOR_PROTOTYPE, TIMELINE_PROTOTYPE } from "@/stores/pluginStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -12,6 +13,7 @@ import { useLayoutStore } from "@/stores/layoutStore";
 import type { EditorDoc, LoreDoc, ProjectData, TimelineDoc } from "@/types/writeproj";
 
 const DEBOUNCE_MS = 2000;
+const CURRENT_FORMAT_VERSION = 2;
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 let busy = false;
@@ -35,26 +37,38 @@ function collect(): ProjectData | null {
   }
   // 收集所有时间轴实例（时间轴…）的独立文档
   const timelines: Record<string, TimelineDoc> = {};
+  const validTimelineFiles = new Set<string>();
   for (const inst of usePluginStore.getState().instances) {
     if (!inst.enabled || inst.prototypeId !== TIMELINE_PROTOTYPE) continue;
     timelines[inst.id] = tl.collectDoc(inst.id);
+    for (const f of tl.getSlice(inst.id).files) validTimelineFiles.add(f.id);
   }
   // 收集所有设定库实例（设定库…）的独立文档
   const lore: Record<string, LoreDoc> = {};
+  const validLoreCards = new Set<string>();
   for (const inst of usePluginStore.getState().instances) {
     if (!inst.enabled || inst.prototypeId !== LORE_PROTOTYPE) continue;
     lore[inst.id] = lo.collectDoc(inst.id);
+    const slice = lo.getSlice(inst.id);
+    for (const f of slice.files) {
+      for (const c of slice.docs[f.id]?.cards ?? []) validLoreCards.add(c.id);
+    }
   }
+
+  // 保存前兜底过滤悬空关联引用（删除漏网或旧数据脏引用）
+  useAssociationStore.getState().prune(validTimelineFiles, validLoreCards);
+
   return {
-    meta: { ...ws.project.meta, updatedAt: new Date().toISOString() },
+    meta: { ...ws.project.meta, updatedAt: new Date().toISOString(), formatVersion: Math.max(ws.project.meta.formatVersion ?? 0, CURRENT_FORMAT_VERSION) },
     editors,
     timelines,
     lore,
-    // 工程级布局/视图配置：插件实例列表（含顺序/名称/启停/侧栏变体）+ 实例级设置覆盖 + 默认主视图
+    // 工程级布局/视图配置：插件实例列表（含顺序/名称/启停/侧栏变体）+ 实例级设置覆盖 + 默认主视图 + 关联段
     config: {
       instances: usePluginStore.getState().instances,
       instanceSettings: useSettingsStore.getState().instanceSettings,
       mainView: useLayoutStore.getState().mainViewId,
+      associations: { timelineToLore: useAssociationStore.getState().timelineToLore },
     },
   };
 }
@@ -84,7 +98,7 @@ function schedule() {
 export function startSaveController(): () => void {
   if (started) return () => undefined;
   started = true;
-  const stores = [useEditorStore, useTimelineStore, useLoreStore, usePluginStore, useSettingsStore];
+  const stores = [useEditorStore, useTimelineStore, useLoreStore, usePluginStore, useSettingsStore, useAssociationStore];
   const unsubs = stores.map((s) => s.subscribe(schedule));
   // 主视图改为工程作用域：切换主视图时触发一次落盘，把 mainView 持久化到 project-config.json
   const unsubLayout = useLayoutStore.subscribe((s, p) => {

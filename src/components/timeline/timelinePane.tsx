@@ -35,13 +35,15 @@ import {
 } from "lucide-react";
 import { normalizeDoc, useTimelineStore, DEFAULT_COLOR_LEGEND } from "@/stores/timelineStore";
 import { useTimelineUiStore } from "@/stores/timelineUiStore";
+import { useAssociationStore } from "@/stores/associationStore";
 import { useInstanceId, useTimelineDoc, useTimelineSlice } from "@/components/editor/editorInstanceContext";
 import { registerFitHandler, registerUndoHandler, registerRedoHandler } from "@/lib/timelineBus";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile, writeBinaryFile } from "@/lib/tauri";
 import { serializeTimeline, parseTimeline } from "@/lib/fileFormats/timelineFormat";
+import { getAllLoreCards } from "@/lib/associationUtils";
 import { captureElementToPng } from "@/lib/fileFormats/pngExport";
-import { notifyError, notifySuccess } from "@/lib/notify";
+import { notifyError, notifyInfo, notifySuccess } from "@/lib/notify";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
 import type { ColorLegendItem, TimelineData, TimelineNodeData } from "@/types/writeproj";
@@ -227,7 +229,8 @@ function TimelineCanvas({
         notifySuccess(`已导出时间轴「${title}」PNG`, path, path);
       } else {
         const data = { ...doc, colorLegend };
-        await writeTextFile(path, serializeTimeline(title, data));
+        const assocIds = useAssociationStore.getState().getCardsForFile(fileId);
+          await writeTextFile(path, serializeTimeline(title, data, assocIds));
         notifySuccess(`已导出时间轴「${title}」`, path, path);
       }
     } catch (e) {
@@ -257,6 +260,14 @@ function TimelineCanvas({
       // 新增一条时间轴文件（导入数据写盘；addFile 自动切换到新文件）
       const file = st.addFile(instanceId, parsed.title);
       st.setFileDoc(instanceId, file.id, parsed.data);
+      // 导入该时间轴文件关联的设定卡片 id（逐条校验，缺失丢弃并提示）
+      const validCardIds = new Set(getAllLoreCards().map((c) => c.cardId));
+      const assocCardIds = parsed.associations.filter((id) => validCardIds.has(id));
+      if (assocCardIds.length > 0) {
+        useAssociationStore.getState().setFileCards(instanceId, file.id, assocCardIds);
+      }
+      const missing = parsed.associations.length - assocCardIds.length;
+      if (missing > 0) notifyInfo(`导入时间轴完成，已丢弃 ${missing} 条不存在的关联。`);
     } catch (e) {
       console.error("导入时间轴失败", e);
     } finally {
@@ -405,8 +416,14 @@ function TimelineCanvas({
   useEffect(() => registerFitHandler(instanceId, fit), [instanceId, fit]);
 
   // —— 撤销 / 重做（实例级快照）——
-  const undo = useCallback(() => useTimelineStore.getState().undo(instanceId), [instanceId]);
-  const redo = useCallback(() => useTimelineStore.getState().redo(instanceId), [instanceId]);
+    const undo = useCallback(() => {
+      useTimelineStore.getState().undo(instanceId);
+      useAssociationStore.getState().undo(instanceId);
+    }, [instanceId]);
+    const redo = useCallback(() => {
+      useTimelineStore.getState().redo(instanceId);
+      useAssociationStore.getState().redo(instanceId);
+    }, [instanceId]);
   useEffect(() => registerUndoHandler(instanceId, undo), [instanceId, undo]);
   useEffect(() => registerRedoHandler(instanceId, redo), [instanceId, redo]);
 

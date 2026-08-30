@@ -23,11 +23,13 @@ import { getSetting, setSetting } from "@/lib/settings";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { useEditorStore } from "@/stores/editorStore";
 import { useTimelineStore } from "@/stores/timelineStore";
+import { useAssociationStore } from "@/stores/associationStore";
 import { LORE_PROTOTYPE, useLoreStore } from "@/stores/loreStore";
 import { useLoreUiStore } from "@/stores/loreUiStore";
 import { useTimelineUiStore } from "@/stores/timelineUiStore";
 import { computeActivityItems, resolveDefaultView } from "@/plugins/hooks";
 import { useLayoutStore } from "@/stores/layoutStore";
+import { clearSidebarSnapshot } from "@/lib/layoutBus";
 import { usePluginStore, EDITOR_PROTOTYPE, TIMELINE_PROTOTYPE } from "@/stores/pluginStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 
@@ -236,6 +238,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         .instances.filter((i) => i.enabled && i.prototypeId === LORE_PROTOTYPE)
         .map((i) => i.id);
       useLoreStore.getState().loadProject(data, loreIds);
+        useAssociationStore.getState().loadProject(data);
       // 工程级「当前使用颜色」恢复（时间轴/设定库，工程隔离）：从工程实例设置读取
       restoreProjectColors(timelineIds, loreIds);
       // 工程级默认插件（工程未存储时回退 editor）：主视图与侧边栏一并切换。
@@ -261,6 +264,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     useEditorStore.getState().reset();
     useTimelineStore.getState().reset();
     useLoreStore.getState().reset();
+    useAssociationStore.getState().reset();
     useLoreUiStore.getState().reset();
     useTimelineUiStore.getState().reset();
     // 恢复程序级实例模板，避免上一工程的实例泄漏到下一工程/新工程
@@ -268,6 +272,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // 清空实例级设置覆盖（应用级设置保留）
     useSettingsStore.getState().reset();
     useLayoutStore.getState().setSidebar(null);
+      clearSidebarSnapshot();
   },
 
   markRecent: async (meta) => {

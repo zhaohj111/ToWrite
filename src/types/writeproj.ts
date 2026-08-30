@@ -174,6 +174,13 @@ export interface EditorDoc {
   chapters: Record<string, ChapterDoc>;
 }
 
+/** 设定库-时间轴联动：project-config.json 中的共享关联段（单一数据源）。
+ *  timelineToLore: 时间轴文件 id -> 设定卡片 id 列表；
+ *  反向视图（卡片 -> 时间轴文件）由前端即时推导，不双写。 */
+export interface ProjectAssociations {
+  timelineToLore: Record<string, string[]>;
+}
+
 /** 工程级布局/视图配置（插件实例列表、实例字号等），存于工程内 project-config.json */
 export interface ProjectConfig {
   /** 工程插件实例列表（含顺序、名称、启停、侧栏变体）；缺省时回退程序级模板 */
@@ -185,6 +192,8 @@ export interface ProjectConfig {
   instanceSettings?: Record<string, Record<string, unknown>>;
   /** 该工程的默认主视图（实例 id）；缺省时打开工程回退 "editor" */
   mainView?: string;
+  /** 设定库-时间轴联动关联（v0.8）；旧工程缺省为空段，由前端兼容读取 */
+  associations?: ProjectAssociations;
 }
 
 export interface ProjectData {

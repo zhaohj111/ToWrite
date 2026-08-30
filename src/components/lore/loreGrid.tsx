@@ -1,9 +1,9 @@
 // 设定库网格（core.lore 网格布局）：搜索 / 标签筛选结果的卡片网格。
 // 卡片：标题、分类、标签（点击快捷搜索）、正文摘要、备注；
-// 操作：在导向图中显示（④）、编辑（⑦）、删除。
+// 操作：关联时间轴、在导向图中显示、编辑、删除。
 
 import { useMemo } from "react";
-import { BookMarked, Pencil, Plus, Share2, Trash2 } from "lucide-react";
+import { BookMarked, Link2, Pencil, Plus, Share2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLoreStore } from "@/stores/loreStore";
 import { useLoreUiStore } from "@/stores/loreUiStore";
@@ -15,10 +15,12 @@ export function LoreGrid({
   onNew,
   onEdit,
   onDelete,
+  onAssociate,
 }: {
   onNew: () => void;
   onEdit: (card: LoreEntry) => void;
   onDelete: (card: LoreEntry) => void;
+  onAssociate: (card: LoreEntry) => void;
 }) {
   const instanceId = useInstanceId();
   const slice = useLoreSlice();
@@ -114,6 +116,13 @@ export function LoreGrid({
 
                   {/* 按钮固定在右下角 */}
                   <div className="mt-auto flex items-center justify-end gap-1 border-t border-line/50 pt-2">
+                    <button
+                      title="关联时间轴"
+                      onClick={() => onAssociate(c)}
+                      className="flex h-6 w-6 items-center justify-center rounded-md bg-panel-3/60 text-fg-muted transition-colors hover:bg-active hover:text-fg"
+                    >
+                      <Link2 className="size-3.5" />
+                    </button>
                     <button
                       title="在导向图中显示"
                       onClick={() => showInGraph(instanceId, c.id)}

@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useLoreStore } from "@/stores/loreStore";
+import { useAssociationStore } from "@/stores/associationStore";
 import {
   useInstanceId,
   useLoreSlice,
@@ -66,6 +67,16 @@ export function LoreSidebar() {
   const fileLabel = useSidebarLabel("core.lore", "fileLabel");
   const folderLabel = useSidebarLabel("core.lore", "folderLabel");
 
+
+    const assocCountForFile = (fid: string) => {
+      const docs = useLoreStore.getState().getSlice(instanceId).docs;
+      const cards = docs[fid]?.cards ?? [];
+      return cards.reduce((sum, c) => sum + useAssociationStore.getState().getFilesForCard(c.id).length, 0);
+    };
+    const assocCountForFolder = (fid: string) => {
+      const inside = files.filter((f) => f.folderId === fid).map((f) => f.id);
+      return inside.reduce((sum, fid2) => sum + assocCountForFile(fid2), 0);
+    };
   const [creating, setCreating] = useState<Creating>(null);
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState<Editing>(null);
@@ -606,6 +617,7 @@ export function LoreSidebar() {
                 <DialogTitle>删除{fileLabel}</DialogTitle>
                 <DialogDescription>
                   确定删除「{confirm.title}」？该{fileLabel}内的全部设定卡片与关系将一并删除，且无法撤销。
+                    {assocCountForFile(confirm.id) > 0 && `将解除 ${assocCountForFile(confirm.id)} 条关联。`}
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
@@ -615,7 +627,9 @@ export function LoreSidebar() {
                 <Button
                   variant="destructive"
                   onClick={() => {
-                    deleteFile(instanceId, confirm.id);
+                    const cardIds = (useLoreStore.getState().getSlice(instanceId).docs[confirm.id]?.cards ?? []).map((c) => c.id);
+                      useAssociationStore.getState().removeCards(cardIds);
+                      deleteFile(instanceId, confirm.id);
                     setConfirm(null);
                   }}
                 >
@@ -653,7 +667,10 @@ export function LoreSidebar() {
                 <button
                   className="flex w-full items-center gap-3 rounded-xl border border-danger/25 bg-danger/5 px-4 py-3 text-left transition-colors hover:border-danger/50 hover:bg-danger/10"
                   onClick={() => {
-                    deleteFolderWithContents(instanceId, confirm.id);
+                    const insideFiles = files.filter((f) => f.folderId === confirm.id);
+                      const cardIds = insideFiles.flatMap((f) => (useLoreStore.getState().getSlice(instanceId).docs[f.id]?.cards ?? []).map((c) => c.id));
+                      useAssociationStore.getState().removeCards(cardIds);
+                      deleteFolderWithContents(instanceId, confirm.id);
                     setConfirm(null);
                   }}
                 >

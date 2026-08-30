@@ -1,8 +1,10 @@
 // 设定库主视图与宿主工具栏之间的轻量通信（按实例 id 注册，支持多实例互不干扰）：
 // 工具栏撤销/重做分派——卡片富文本编辑器打开时驱动内容历史，
 // 否则回退视图导航历史（返回搜索结果等）。
+// v0.8：接入共享关联段撤销；新增 focusCard 处理器用于时间轴→设定库跳转居中。
 
 import { useLoreStore } from "@/stores/loreStore";
+import { useAssociationStore } from "@/stores/associationStore";
 
 interface LoreEditorHandlers {
   undo: () => void;
@@ -39,16 +41,42 @@ export async function captureLoreGraph(instanceId: string): Promise<string | nul
   return await handler();
 }
 
-/** 撤销：内容编辑器打开时驱动 TipTap 内容历史，否则撤销结构变更（增删卡片/连线/标签） */
-export function requestLoreUndo(instanceId: string): void {
-  const ed = editors.get(instanceId);
-  if (ed) ed.undo();
-  else useLoreStore.getState().undo(instanceId);
+/** 连接图聚焦处理器：由 LoreGraph 注册，用于外部请求定位并居中某张卡片 */
+type LoreFocusHandler = (cardId: string) => void;
+
+const focusHandlers = new Map<string, LoreFocusHandler>();
+
+export function registerLoreFocusHandler(
+  instanceId: string,
+  handler: LoreFocusHandler | null,
+): void {
+  if (handler) focusHandlers.set(instanceId, handler);
+  else focusHandlers.delete(instanceId);
 }
 
-/** 重做：内容编辑器打开时驱动 TipTap 内容历史，否则重做结构变更 */
+/** 请求设定库连接图聚焦某张卡片（时间轴→设定库跳转使用） */
+export function requestLoreFocus(instanceId: string, cardId: string): void {
+  focusHandlers.get(instanceId)?.(cardId);
+}
+
+/** 撤销：内容编辑器打开时驱动 TipTap 内容历史，否则撤销结构变更 + 共享关联段 */
+export function requestLoreUndo(instanceId: string): void {
+  const ed = editors.get(instanceId);
+  if (ed) {
+    ed.undo();
+    return;
+  }
+  useLoreStore.getState().undo(instanceId);
+  useAssociationStore.getState().undo(instanceId);
+}
+
+/** 重做：内容编辑器打开时驱动 TipTap 内容历史，否则重做结构变更 + 共享关联段 */
 export function requestLoreRedo(instanceId: string): void {
   const ed = editors.get(instanceId);
-  if (ed) ed.redo();
-  else useLoreStore.getState().redo(instanceId);
+  if (ed) {
+    ed.redo();
+    return;
+  }
+  useLoreStore.getState().redo(instanceId);
+  useAssociationStore.getState().redo(instanceId);
 }

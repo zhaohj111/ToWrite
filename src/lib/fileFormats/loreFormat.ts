@@ -1,8 +1,9 @@
 // 设定库文件格式（.lore）：一个设定库文件（卡片+关系边）+ 实例级标签的 JSON 快照。
+// v0.8：附带卡片关联的时间轴 id 清单（cardId -> timeline file id 列表）。
 import type { LoreData, LoreTag } from "@/types/writeproj";
 
 export const LORE_FORMAT = "towrite.lore";
-export const LORE_FORMAT_VERSION = 1;
+export const LORE_FORMAT_VERSION = 2;
 
 export interface LoreSnapshot {
   format: typeof LORE_FORMAT;
@@ -10,16 +11,24 @@ export interface LoreSnapshot {
   title: string;
   data: LoreData;
   tags?: LoreTag[];
+  /** 卡片 id -> 关联的时间轴文件 id 列表 */
+  associations?: Record<string, string[]>;
 }
 
 /** 把一个设定库文件序列化为 .lore 文件文本。 */
-export function serializeLore(title: string, data: LoreData, tags: LoreTag[]): string {
+export function serializeLore(
+  title: string,
+  data: LoreData,
+  tags: LoreTag[],
+  associations?: Record<string, string[]>,
+): string {
   const snapshot: LoreSnapshot = {
     format: LORE_FORMAT,
     version: LORE_FORMAT_VERSION,
     title: title || "未命名设定库",
     data,
     tags,
+    ...(associations && Object.keys(associations).length > 0 ? { associations } : {}),
   };
   return JSON.stringify(snapshot, null, 2);
 }
@@ -28,6 +37,7 @@ export interface ParsedLore {
   title: string;
   data: LoreData;
   tags: LoreTag[];
+  associations: Record<string, string[]>;
 }
 
 /** 解析 .lore 文件文本；格式不合法时抛出明确错误。 */
@@ -48,9 +58,16 @@ export function parseLore(text: string): ParsedLore {
   if (!obj.data || !Array.isArray(obj.data.cards)) {
     throw new Error("设定库文件缺少 data.cards，无法导入。");
   }
+  const associations: Record<string, string[]> = {};
+  if (obj.associations && typeof obj.associations === "object") {
+    for (const [cardId, ids] of Object.entries(obj.associations)) {
+      if (Array.isArray(ids)) associations[cardId] = ids.filter((x): x is string => typeof x === "string");
+    }
+  }
   return {
     title: obj.title || "导入的设定库",
     data: obj.data,
     tags: Array.isArray(obj.tags) ? obj.tags : [],
+    associations,
   };
 }

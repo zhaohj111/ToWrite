@@ -38,9 +38,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useLoreStore } from "@/stores/loreStore";
+import { LoreTimelineAssociationDialog } from "@/components/lore/LoreTimelineAssociationDialog";
 import { useLoreUiStore } from "@/stores/loreUiStore";
 import { useInstanceId, useLoreSlice } from "@/components/editor/editorInstanceContext";
-import { registerLoreCapture } from "@/lib/loreBus";
+import { registerLoreCapture, registerLoreFocusHandler } from "@/lib/loreBus";
 import { captureElementToPng } from "@/lib/fileFormats/pngExport";
 import { ColorPickerPanel } from "@/components/ui/colorPicker";
 import { cn } from "@/lib/cn";
@@ -140,6 +141,7 @@ export function LoreGraph({
   /** 当前选中的线段（高亮） */
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
+  const [assocCardId, setAssocCardId] = useState<string | null>(null);
   // —— 手势 ref ——
   const dragRef = useRef<{
     mode: "pan" | "node";
@@ -301,7 +303,24 @@ export function LoreGraph({
         if (fitView) setView(prev);
       }
     });
-  }, [instanceId, computeFitView]);
+    }, [instanceId, computeFitView]);
+
+    // —— 外部请求聚焦卡片（时间轴→设定库跳转）：居中并选中 ——
+    useEffect(() => {
+      return registerLoreFocusHandler(instanceId, (cardId) => {
+        const card = cards.find((c) => c.id === cardId);
+        if (!card) return;
+        const p = posFor(card);
+        const el = viewportRef.current;
+        if (el) {
+          setView({
+            x: el.clientWidth / 2 - p.x * 1,
+            y: el.clientHeight / 2 - p.y * 1,
+            zoom: 1,
+          });
+        }
+      });
+    }, [instanceId, cards, posFor]);
 
   // ④ 网格「在导向图中显示」：图视图挂载时定位到选中卡片
   useEffect(() => {
@@ -965,6 +984,11 @@ export function LoreGraph({
             onConnect={menuConnect}
             onQuickConnect={menuQuickConnect}
             onDelete={menuDelete}
+            onAssociate={() => {
+              const id = cardMenu.currentId;
+              setCardMenu(null);
+              setAssocCardId(id);
+            }}
             onClearSel={menuClearSel}
             onClose={() => setCardMenu(null)}
           />,
@@ -1062,11 +1086,19 @@ export function LoreGraph({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* 关联时间轴弹窗（右键菜单入口） */}
+      {assocCardId && fileId && (
+        <LoreTimelineAssociationDialog
+          loreInstanceId={instanceId}
+          fileId={fileId}
+          cardId={assocCardId}
+          onClose={() => setAssocCardId(null)}
+        />
+      )}
     </>
   );
 }
 
-/** 包一层（与旧版签名一致，供 lorePane 引用） */
 export function LoreGraphRoot({
   onDeleteCard,
   onDeleteCards,
@@ -1139,6 +1171,7 @@ function CardMenu({
   onEdit,
   onConnect,
   onQuickConnect,
+    onAssociate,
   onDelete,
   onClearSel,
   onClose,
@@ -1150,6 +1183,7 @@ function CardMenu({
   onEdit: () => void;
   onConnect: () => void;
   onQuickConnect: () => void;
+    onAssociate: () => void;
   onDelete: () => void;
   onClearSel: () => void;
   onClose: () => void;
@@ -1190,6 +1224,12 @@ function CardMenu({
             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg transition-colors hover:bg-hover"
           >
             <MousePointer2 className="size-3.5 text-fg-muted" /> {multi ? "整体快速连接" : "快速连接"}
+          </button>
+          <button
+            onClick={onAssociate}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg transition-colors hover:bg-hover"
+          >
+            <Link2 className="size-3.5 text-fg-muted" /> 关联时间轴
           </button>
           {multi && (
             <button

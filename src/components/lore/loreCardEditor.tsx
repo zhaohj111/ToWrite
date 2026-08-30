@@ -12,6 +12,7 @@ import {
   List,
   ListOrdered,
   Plus,
+  Link2,
   Redo2,
   Search,
   Strikethrough,
@@ -23,8 +24,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Textarea } from "@/components/ui/textarea";
 import { ColorSwatchPicker } from "@/components/ui/colorPicker";
 import { useLoreStore } from "@/stores/loreStore";
+import { LoreTimelineAssociationDialog } from "@/components/lore/LoreTimelineAssociationDialog";
+import { useAssociationStore } from "@/stores/associationStore";
 import { useInstanceId, useLoreSlice } from "@/components/editor/editorInstanceContext";
 import { registerLoreEditor } from "@/lib/loreBus";
+import { getFileRefsForCard } from "@/lib/associationUtils";
 import { emptyChapterDoc } from "@/types/writeproj";
 import { cn } from "@/lib/cn";
 
@@ -55,7 +59,10 @@ export function LoreCardEditor({
     TAG_COLORS[tags.length % TAG_COLORS.length],
   );
   const [candidateSearch, setCandidateSearch] = useState("");
+    const [manageAssocOpen, setManageAssocOpen] = useState(false);
 
+    useAssociationStore((s) => s.timelineToLore);
+    const associatedFiles = getFileRefsForCard(cardId);
   // —— 已添加标签横向拖动浏览（隐藏滚动条，多标签时可左键拖动）——
   const tagsScrollRef = useRef<HTMLDivElement>(null);
   const tagsDragRef = useRef<{ startClientX: number; startLeft: number } | null>(null);
@@ -86,6 +93,35 @@ export function LoreCardEditor({
     };
   }, []);
 
+
+    // —— 关联文件行横向拖动浏览 ——
+    const assocScrollRef = useRef<HTMLDivElement>(null);
+    const assocDragRef = useRef<{ startClientX: number; startLeft: number; moved: boolean } | null>(null);
+    const startAssocDrag = (e: React.PointerEvent) => {
+      if (e.button !== 0 || e.pointerType !== "mouse") return;
+      if ((e.target as HTMLElement).closest("button, input")) return;
+      const el = assocScrollRef.current;
+      assocDragRef.current = { startClientX: e.clientX, startLeft: el?.scrollLeft ?? 0, moved: false };
+    };
+
+    useEffect(() => {
+      const onMove = (e: PointerEvent) => {
+        const d = assocDragRef.current;
+        if (!d) return;
+        const dx = e.clientX - d.startClientX;
+        if (!d.moved && Math.abs(dx) < 4) return;
+        d.moved = true;
+        const el = assocScrollRef.current;
+        if (el) el.scrollLeft = d.startLeft - dx;
+      };
+      const onUp = () => { assocDragRef.current = null; };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      return () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      };
+    }, []);
   const editor = useEditor({
     extensions: [StarterKit],
     content: card?.content ?? emptyChapterDoc(),
@@ -153,7 +189,33 @@ export function LoreCardEditor({
               placeholder="设定名…"
               className="h-9 min-w-0 flex-1 bg-transparent px-2.5 font-display text-base font-semibold text-fg outline-none placeholder:text-fg-muted/50"
             />
-            <div className="flex shrink-0 items-center border-l border-line/50 bg-app px-2">
+          </div>
+            {/* 标签行：chips + 右侧固定「添加标签」入口 */}
+            <div className="flex items-center gap-1.5 px-2 py-1.5">
+              <div
+                ref={tagsScrollRef}
+                onPointerDown={startTagsDrag}
+                className="hidden-scrollbar flex min-w-0 flex-1 cursor-grab items-center gap-1.5 overflow-x-auto active:cursor-grabbing"
+              >
+                {cardTags.length === 0 ? (
+                  <span className="text-[11px] text-fg-muted/60">暂无标签</span>
+                ) : (
+                  cardTags.map((tid) => {
+                    const t = tags.find((x) => x.id === tid);
+                    if (!t) return null;
+                    return (
+                      <span
+                        key={tid}
+                        title={t.name}
+                        className="shrink-0 whitespace-nowrap rounded px-2 py-1 text-[11px] font-medium"
+                        style={{ background: t.color + "26", color: t.color }}
+                      >
+                        {t.name}
+                      </span>
+                    );
+                  })
+                )}
+              </div>
               <button
                 onClick={() => setTagDialogOpen(true)}
                 className="flex shrink-0 items-center gap-1 rounded-md bg-accent-soft px-2.5 py-1 text-[11px] font-medium text-accent transition-colors hover:bg-accent/20"
@@ -161,31 +223,30 @@ export function LoreCardEditor({
                 <Plus className="size-3" /> 添加标签
               </button>
             </div>
-          </div>
 
-          {/* 已添加标签：只读单行，超出可左键拖动横向浏览（移除请在「添加标签」弹窗中操作） */}
-          {cardTags.length > 0 && (
-            <div
-              ref={tagsScrollRef}
-              onPointerDown={startTagsDrag}
-              className="hidden-scrollbar flex cursor-grab items-center gap-1.5 overflow-x-auto active:cursor-grabbing"
-            >
-              {cardTags.map((tid) => {
-                const t = tags.find((x) => x.id === tid);
-                if (!t) return null;
-                return (
-                  <span
-                    key={tid}
-                    title={t.name}
-                    className="shrink-0 whitespace-nowrap rounded px-2 py-1 text-[11px] font-medium"
-                    style={{ background: t.color + "26", color: t.color }}
-                  >
-                    {t.name}
-                  </span>
-                );
-              })}
-            </div>
-          )}
+            {/* 关联文件行：chips 样式同标签行；无关联时整行隐藏 */}
+            {associatedFiles.length > 0 && (
+              <div className="flex items-center gap-1.5 px-2 py-1.5">
+                <div ref={assocScrollRef} onPointerDown={startAssocDrag} className="hidden-scrollbar flex min-w-0 flex-1 cursor-grab items-center gap-1.5 overflow-x-auto active:cursor-grabbing">
+                  {associatedFiles.map((f) => (
+                    <span
+                      key={f.fileId}
+                        className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-[11px] font-medium text-accent"
+                      style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}
+                    >
+                      <Link2 className="size-3" />
+                      {f.instanceName} / {f.title}
+                    </span>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setManageAssocOpen(true)}
+                  className="flex shrink-0 items-center gap-1 rounded-md bg-accent-soft px-2.5 py-1 text-[11px] font-medium text-accent transition-colors hover:bg-accent/20"
+                >
+                  管理关联文件
+                </button>
+              </div>
+            )}
 
           {/* 内容：TipTap */}
           <div className="rounded-xl border border-line bg-app">
@@ -296,11 +357,11 @@ export function LoreCardEditor({
               <span className="text-[11px] font-semibold tracking-[0.14em] text-fg-muted">
                 已添加 {cardTags.length}
               </span>
-              {cardTags.length > 0 && (
+              {(
                 <span className="text-[10px] text-fg-muted/60">点击标签可移除</span>
               )}
             </div>
-            {cardTags.length > 0 && (
+            {(
               <div className="flex max-h-14 flex-wrap gap-1.5 overflow-y-auto">
                 {cardTags.map((tid) => {
                   const t = tags.find((x) => x.id === tid);
@@ -381,7 +442,17 @@ export function LoreCardEditor({
             </div>
           </div>
         </DialogContent>
-      </Dialog>
+        {/* 关联时间轴弹窗（管理关联文件复用右键卡片弹窗） */}
+        </Dialog>
+        {manageAssocOpen && (
+          <LoreTimelineAssociationDialog
+            loreInstanceId={instanceId}
+            fileId={fileId}
+            cardId={cardId}
+            onClose={() => setManageAssocOpen(false)}
+          />
+        )}
+
     </Dialog>
   );
 }

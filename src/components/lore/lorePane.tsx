@@ -7,17 +7,21 @@ import { useEffect, useRef, useState } from "react";
 import { Download, FileImage, FileUp, Search, Upload, X } from "lucide-react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { useLoreStore } from "@/stores/loreStore";
+import { useAssociationStore } from "@/stores/associationStore";
 import { EMPTY_LORE_UI_SLICE, useLoreUiStore } from "@/stores/loreUiStore";
 import { useInstanceId, useLoreSlice } from "@/components/editor/editorInstanceContext";
 import { LoreGraphRoot } from "@/components/lore/loreGraph";
 import { LoreGrid } from "@/components/lore/loreGrid";
 import { LoreCardEditor } from "@/components/lore/loreCardEditor";
+import { LoreTimelineAssociationDialog } from "@/components/lore/LoreTimelineAssociationDialog";
 import type { LoreData } from "@/types/writeproj";
 import { readTextFile, writeBinaryFile, writeTextFile } from "@/lib/tauri";
 import { serializeLore, parseLore } from "@/lib/fileFormats/loreFormat";
+import { getAllTimelineFiles } from "@/lib/associationUtils";
 import { captureLoreGraph } from "@/lib/loreBus";
-import { notifyError, notifySuccess } from "@/lib/notify";
+import { notifyError, notifyInfo, notifySuccess } from "@/lib/notify";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/cn";
 
 export function LorePane() {
@@ -38,7 +42,9 @@ export function LorePane() {
   const [searchDraft, setSearchDraft] = useState(view?.query ?? "");
   const [tagSearch, setTagSearch] = useState("");
 
+    const [assocCardId, setAssocCardId] = useState<string | null>(null);
   // —— 标签筛选 chips：左键拖动横向滚动（隐藏滚动条，多标签时可拖动）——
+    const [confirmDeleteCards, setConfirmDeleteCards] = useState<string[] | null>(null);
   const chipsScrollRef = useRef<HTMLDivElement>(null);
   const chipsDragRef = useRef<{ startClientX: number; startLeft: number; moved: boolean } | null>(null);
   const suppressChipClickRef = useRef(false);
@@ -133,11 +139,20 @@ export function LorePane() {
     if (card) openCard(instanceId, card.id);
   };
 
-  /** 直接删除（进撤销栈，无需确认） */
-  const deleteCards = (ids: string[]) => {
+  /** 删除设定卡片：有关联时先确认解除数量；无关联直接删除（进撤销栈） */
+  const performDeleteCards = (ids: string[]) => {
     if (!fileId) return;
     for (const id of ids) deleteCard(instanceId, fileId, id);
     if (editingId && ids.includes(editingId)) closeCard(instanceId);
+  };
+  const deleteCards = (ids: string[]) => {
+    if (!fileId) return;
+    const assocCount = ids.reduce((sum, id) => sum + useAssociationStore.getState().getFilesForCard(id).length, 0);
+    if (assocCount > 0) {
+      setConfirmDeleteCards(ids);
+      return;
+    }
+    performDeleteCards(ids);
   };
 
   // —— v0.7：导出（.lore / .png）与导入（.lore）——
@@ -169,7 +184,12 @@ export function LorePane() {
         await writeBinaryFile(path, base64);
         notifySuccess(`已导出设定库「${title}」PNG`, path, path);
       } else {
-        await writeTextFile(path, serializeLore(title, data, cur.tags));
+                  const assocMap: Record<string, string[]> = {};
+          for (const c of data.cards) {
+            const ids = useAssociationStore.getState().getFilesForCard(c.id);
+            if (ids.length > 0) assocMap[c.id] = ids;
+          }
+          await writeTextFile(path, serializeLore(title, data, cur.tags, assocMap));
         notifySuccess(`已导出设定库「${title}」`, path, path);
       }
     } catch (e) {
@@ -213,6 +233,28 @@ export function LorePane() {
       // 新增一条设定库文件（导入数据写盘；addFile 自动切换到新文件）
       const file = st.addFile(instanceId, parsed.title);
       st.setFileData(instanceId, file.id, data);
+      // 导入卡片关联的时间轴 id（逐条校验，缺失丢弃并提示）
+      const validTimelineIds = new Set(getAllTimelineFiles().map((f) => f.fileId));
+      let missing = 0;
+      const assocByFile: Record<string, string[]> = {};
+      const importedCardIds = new Set(data.cards.map((c) => c.id));
+      for (const [cardId, ids] of Object.entries(parsed.associations ?? {})) {
+        if (!importedCardIds.has(cardId)) {
+          missing += ids.length;
+          continue;
+        }
+        for (const tid of ids) {
+          if (validTimelineIds.has(tid)) {
+            (assocByFile[tid] ??= []).push(cardId);
+          } else {
+            missing++;
+          }
+        }
+      }
+      for (const [tid, cardIds] of Object.entries(assocByFile)) {
+        useAssociationStore.getState().setFileCards(instanceId, tid, cardIds);
+      }
+      if (missing > 0) notifyInfo(`导入设定库完成，已丢弃 ${missing} 条不存在的关联。`);
     } catch (e) {
       console.error("导入设定库失败", e);
     } finally {
@@ -316,6 +358,7 @@ export function LorePane() {
             onNew={handleNew}
             onEdit={(c) => openCard(instanceId, c.id)}
             onDelete={(c) => deleteCards([c.id])}
+            onAssociate={(c) => setAssocCardId(c.id)}
           />
         ) : (
           <LoreGraphRoot
@@ -371,6 +414,47 @@ export function LorePane() {
           onClose={() => closeCard(instanceId)}
         />
       )}
+      {/* 关联时间轴弹窗（网格/右键共用） */}
+      {assocCardId && fileId && (
+        <LoreTimelineAssociationDialog
+          loreInstanceId={instanceId}
+          fileId={fileId}
+          cardId={assocCardId}
+          onClose={() => setAssocCardId(null)}
+        />
+      )}
+
+      {/* 删除设定确认：有关联时提示解除数量 */}
+      <Dialog open={!!confirmDeleteCards} onOpenChange={(open) => !open && setConfirmDeleteCards(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>删除设定</DialogTitle>
+            <DialogDescription>
+              {confirmDeleteCards && `将解除 ${confirmDeleteCards.reduce((sum, id) => sum + useAssociationStore.getState().getFilesForCard(id).length, 0)} 条关联，删除后无法撤销。`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              onClick={() => setConfirmDeleteCards(null)}
+              className="rounded-md px-3 py-1.5 text-xs text-fg-muted transition-colors hover:bg-hover hover:text-fg"
+            >
+              取消
+            </button>
+            <button
+              onClick={() => {
+                if (confirmDeleteCards) {
+                  useAssociationStore.getState().removeCards(confirmDeleteCards);
+                  performDeleteCards(confirmDeleteCards);
+                }
+                setConfirmDeleteCards(null);
+              }}
+              className="rounded-md bg-danger px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+            >
+              删除
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

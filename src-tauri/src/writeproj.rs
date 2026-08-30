@@ -301,6 +301,15 @@ pub struct ProjectPluginInstance {
     pub enabled: bool,
 }
 
+/// 设定库-时间轴联动关联段（单一数据源，只存 id）。
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectAssociations {
+    /// 时间轴文件 id -> 设定卡片 id 列表
+    #[serde(default)]
+    pub timeline_to_lore: HashMap<String, Vec<String>>,
+}
+
 /// 工程级布局/视图配置（插件实例列表、实例字号等），存于工程内 `project-config.json`。
 /// 全部字段可选：旧工程读取时缺省为空，回退到程序级配置/默认值。
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -319,6 +328,9 @@ pub struct ProjectConfig {
     /// 该工程的默认主视图（实例 id）；缺省时打开工程回退 "editor"
     #[serde(default)]
     pub main_view: Option<String>,
+    /// 设定库-时间轴联动关联；旧工程缺省为空段
+    #[serde(default)]
+    pub associations: Option<ProjectAssociations>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -350,7 +362,7 @@ pub fn empty_project(name: &str) -> ProjectData {
         note: String::new(),
         created_at: now.clone(),
         updated_at: now,
-        format_version: 1,
+        format_version: 2,
         semantic_index: false,
     };
     ProjectData {

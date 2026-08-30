@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useTimelineStore } from "@/stores/timelineStore";
+import { useAssociationStore } from "@/stores/associationStore";
 import {
   useInstanceId,
   useSidebarLabel,
@@ -66,6 +67,12 @@ export function TimelineSidebar() {
   const fileLabel = useSidebarLabel("core.timeline", "fileLabel");
   const folderLabel = useSidebarLabel("core.timeline", "folderLabel");
 
+
+    const assocCountForFile = (fid: string) => useAssociationStore.getState().getCardsForFile(fid).length;
+    const assocCountForFolder = (fid: string) => {
+      const inside = files.filter((f) => f.folderId === fid).map((f) => f.id);
+      return inside.reduce((sum, fid2) => sum + assocCountForFile(fid2), 0);
+    };
   const [creating, setCreating] = useState<Creating>(null);
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState<Editing>(null);
@@ -217,7 +224,7 @@ export function TimelineSidebar() {
       }
     };
 
-    const onUp = () => {
+    const onUp = (e: PointerEvent) => {
       suppressClickRef.current = false;
       const d = dragRef.current;
       if (d) {
@@ -606,6 +613,7 @@ export function TimelineSidebar() {
                 <DialogTitle>删除{fileLabel}</DialogTitle>
                 <DialogDescription>
                   确定删除「{confirm.title}」？该{fileLabel}上的全部标签将一并删除，且无法撤销。
+                    {assocCountForFile(confirm.id) > 0 && `将解除 ${assocCountForFile(confirm.id)} 条关联。`}
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
@@ -615,7 +623,8 @@ export function TimelineSidebar() {
                 <Button
                   variant="destructive"
                   onClick={() => {
-                    deleteFile(instanceId, confirm.id);
+                    useAssociationStore.getState().removeTimelineFile(confirm.id);
+                      deleteFile(instanceId, confirm.id);
                     setConfirm(null);
                   }}
                 >
@@ -653,7 +662,9 @@ export function TimelineSidebar() {
                 <button
                   className="flex w-full items-center gap-3 rounded-xl border border-danger/25 bg-danger/5 px-4 py-3 text-left transition-colors hover:border-danger/50 hover:bg-danger/10"
                   onClick={() => {
-                    deleteFolderWithContents(instanceId, confirm.id);
+                    const insideFiles = files.filter((f) => f.folderId === confirm.id).map((f) => f.id);
+                      useAssociationStore.getState().removeTimelineFiles(insideFiles);
+                      deleteFolderWithContents(instanceId, confirm.id);
                     setConfirm(null);
                   }}
                 >
