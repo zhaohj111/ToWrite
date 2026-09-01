@@ -14,11 +14,11 @@ import { notifyError, notifySuccess } from "@/lib/notify";
  * 本地支持者名单（仓库根目录 Supporter.md）：仅开发/测试环境读取，文件不存在则为空。
  * 用动态 glob（import.meta.glob + ?raw）：文件缺失不导致构建失败（该场景即「无文件不显示」）。
  */
-const localSupporterModules = import.meta.glob<string>("../../Supporter.md", {
+const localSupporterModules = import.meta.glob<string>("../../Supporter.*", {
   query: "?raw",
   import: "default",
 });
-const LOCAL_SUPPORTER_KEY = "../../Supporter.md";
+// 键名不固定（Supporter.md / .txt 等），读取时取首个值
 
 const KEY_AUTO_CHECK = "updateAutoCheck";
 
@@ -90,15 +90,8 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     set({ autoCheck });
     await ensureProgressListener();
     if (autoCheck) {
-      // 延迟自动检查，避免挤占启动时其他初始化；支持者名单排队在检查更新之后
-      window.setTimeout(() => {
-        void get()
-          .checkNow()
-          .then(() => get().fetchSupporter());
-      }, 2500);
-    } else {
-      // 未启用自动检查更新：启动时仍检查并拉取支持者名单
-      window.setTimeout(() => void get().fetchSupporter(), 2500);
+      // 延迟自动检查，避免挤占启动时其他初始化（支持者名单改为打开页面时拉取）
+      window.setTimeout(() => void get().checkNow(), 2500);
     }
   },
 
@@ -148,32 +141,32 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     }
   },
   fetchSupporter: async () => {
-    // 每次会话只检查一次（启动时发起；「文件不存在」也视为已完成检查）
-    if (get().supporterLoading || get().supporterChecked) return;
-    // 开发/测试环境：读取本地仓库根目录 Supporter.md，不拉远程；文件不存在则不显示名单
+    if (get().supporterLoading) return;
+    set({ supporterLoading: true });
+    // 开发/测试环境：直接加载本地支持者名单（仓库根 Supporter.md，构建时嵌入），不请求远程
     if (isDev) {
-      set({ supporterLoading: true });
-      try {
-        const load = localSupporterModules[LOCAL_SUPPORTER_KEY];
-        if (load) {
-          set({ supporter: await load(), supporterLoading: false, supporterChecked: true });
-        } else {
-          set({ supporter: null, supporterLoading: false, supporterChecked: true });
-        }
-      } catch (e) {
-        console.warn("读取本地支持者名单失败", e);
-        set({ supporter: null, supporterLoading: false, supporterChecked: true });
-      }
+      const localMd = await loadLocalSupporter();
+      set({ supporter: localMd, supporterLoading: false, supporterChecked: true });
       return;
     }
-    if (!isTauri()) return;
-    set({ supporterLoading: true });
-    try {
-      const md = await fetchSupporter();
-      set({ supporter: md, supporterLoading: false, supporterChecked: true });
-    } catch (e) {
-      console.warn("拉取支持者名单失败", e);
-      set({ supporter: null, supporterLoading: false, supporterChecked: true });
+    // 远程优先：GitHub 仓库根目录 Supporter.md（Tauri 命令；文件不存在返回 null → 同样回退本地）
+    if (isTauri()) {
+      try {
+        const md = await fetchSupporter();
+        if (md != null) {
+          set({ supporter: md, supporterLoading: false, supporterChecked: true });
+          return;
+        }
+        console.warn("远程无 Supporter.md，回退本地");
+      } catch (e) {
+        console.warn("远程拉取支持者名单失败，回退本地", e);
+      }
+    }
+    // 回退：本地文件（构建时嵌入的仓库根 Supporter.md）
+    const localMd = await loadLocalSupporter();
+    set({ supporter: localMd, supporterLoading: false, supporterChecked: true });
+    if (localMd == null) {
+      console.warn("支持者名单：本地文件亦不可用，显示暂无");
     }
   },
 
@@ -203,9 +196,15 @@ async function ensureProgressListener(): Promise<void> {
     useUpdateStore.setState({ progress: e.payload });
   });
 }
-/** 支持者名单是否可用（启动检查完成且文件存在）：设置导航据此显示「支持者名单」页 */
-export function useSupporterAvailable(): boolean {
-  const supporter = useUpdateStore((s) => s.supporter);
-  const checked = useUpdateStore((s) => s.supporterChecked);
-  return checked && supporter != null;
+
+/** 从本地仓库根目录 Supporter.md 读取（构建时嵌入；文件不存在返回 null） */
+async function loadLocalSupporter(): Promise<string | null> {
+  // 值遍历：兼容 glob 键名规范化差异（../ 前缀等）
+  const load = Object.values(localSupporterModules)[0] as (() => Promise<string>) | undefined;
+  if (!load) return null;
+  try {
+    return await load();
+  } catch {
+    return null;
+  }
 }

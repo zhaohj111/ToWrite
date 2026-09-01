@@ -121,9 +121,11 @@ export function ColorSwatchPicker({
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => {
-      if (wrapRef.current?.contains(e.target as Node)) return;
-      if (panelRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
+        const target = e.target as Element | null;
+        if (wrapRef.current?.contains(target as Node)) return;
+        if (panelRef.current?.contains(target as Node)) return;
+        if (target?.closest?.("[data-color-picker-panel]")) return;
+        setOpen(false);
     };
     window.addEventListener("pointerdown", onDown);
     return () => window.removeEventListener("pointerdown", onDown);
@@ -156,8 +158,10 @@ export function ColorSwatchPicker({
         createPortal(
           <div
             ref={panelRef}
-            className="fixed z-50 overflow-hidden rounded-xl border border-line/70 bg-app shadow-pop"
-            style={panelStyle}
+              data-color-picker-panel="true"
+              onPointerDown={(e) => e.stopPropagation()}
+            className="fixed z-[70] overflow-hidden rounded-xl border border-line/70 bg-app shadow-pop"
+            style={{ ...panelStyle, zIndex: 100 }}
           >
             <ColorPickerPanel value={value} onChange={onChange} />
           </div>,

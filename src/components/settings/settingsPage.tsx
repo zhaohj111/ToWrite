@@ -6,7 +6,6 @@ import { ArrowLeft } from "lucide-react";
 import { pluginRegistry } from "@/plugins/registry";
 import { useRegistryVersion } from "@/plugins/hooks";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
-import { useSupporterAvailable } from "@/stores/updateStore";
 import type { SettingsPageContribution } from "@/types/settings";
 import { SettingsNav } from "@/components/settings/settingsNav";
 import { SettingsSearch } from "@/components/settings/settingsSearch";
@@ -17,8 +16,6 @@ export function SettingsPage() {
   // 订阅贡献注册表版本（settings.pages 由插件动态注册/更新时刷新目录树）
   useRegistryVersion();
   const hasProject = !!useWorkspaceStore((s) => s.project);
-  // 支持者名单页：启动检查确认存在 Supporter.md 后才显示（无该文件则不显示该页面）
-  const supporterAvailable = useSupporterAvailable();
   const closeSettings = useWorkspaceStore((s) => s.closeSettings);
 
   const [group, setGroup] = useState("app");
@@ -28,7 +25,7 @@ export function SettingsPage() {
   // 插件自有设置页（prototypeId）只在该插件详情的「配置」tab 内展示，不进分类导航与搜索
   const pages = (
     pluginRegistry.getContributions("settings.pages") as SettingsPageContribution[]
-  ).filter((p) => !p.prototypeId && (p.id !== "about.supporter" || supporterAvailable));
+  ).filter((p) => !p.prototypeId);
   const groupPages = pages.filter((p) => p.group === group);
   const pageDisabled = (p: SettingsPageContribution) => p.scope === "project" && !hasProject;
   const selectable = groupPages.filter((p) => !pageDisabled(p));

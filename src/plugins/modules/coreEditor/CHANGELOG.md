@@ -1,4 +1,8 @@
-## v0.7.0
+## v0.6.2
+
+* 修复多文件内容错乱问题
+
+## v0.6.1
 
 - 新增PDF（图片型）、TXT、Markdown等文件格式的导出
 - 新增PDF、Doc/Docx、TXT、Markdown等文件格式的导入

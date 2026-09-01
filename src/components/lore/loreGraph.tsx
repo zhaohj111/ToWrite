@@ -132,6 +132,8 @@ export function LoreGraph({
   const [paneMenu, setPaneMenu] = useState<{ x: number; y: number } | null>(null);
   const [edgeMenu, setEdgeMenu] = useState<{ edgeId: string; mode: "edit" | "context"; x: number; y: number } | null>(null);
   const [edgeDraft, setEdgeDraft] = useState("");
+  const [inlineEdgeId, setInlineEdgeId] = useState<string | null>(null);
+  const [inlineEdgeDraft, setInlineEdgeDraft] = useState("");
   /** 右键卡片上下文菜单：目标 id 列表 + 当前右键卡 + 位置 */
   const [cardMenu, setCardMenu] = useState<{ ids: string[]; currentId: string; x: number; y: number } | null>(null);
   /** 连线颜色替换弹窗：目标边 + 字段（color/labelColor）+ 位置 */
@@ -370,6 +372,10 @@ export function LoreGraph({
     const edgeEl = target.closest?.("[data-lore-edge]") as HTMLElement | null;
 
     if (e.button === 0) {
+        if (inlineEdgeId && !nodeEl && !edgeEl) {
+          cancelInlineEdge();
+          return;
+        }
       if (connectLine) {
         if (nodeEl) {
           const nid = nodeEl.dataset.loreNode;
@@ -637,6 +643,26 @@ export function LoreGraph({
     setCardMenu(null);
   };
 
+    const startInlineEdgeEdit = (edgeId: string, label: string) => {
+      setSelectedEdgeId(edgeId);
+      setInlineEdgeId(edgeId);
+      setInlineEdgeDraft(label);
+      setEdgeMenu(null);
+    };
+
+    const commitInlineEdge = () => {
+      if (inlineEdgeId && fileId) {
+        const label = inlineEdgeDraft.trim();
+        updateEdge(instanceId, fileId, inlineEdgeId, {
+          label: label || undefined,
+          labelColor: edgeLabelColor,
+        });
+      }
+      setInlineEdgeId(null);
+    };
+
+    const cancelInlineEdge = () => setInlineEdgeId(null);
+
   const saveEdgeLabel = (label: string) => {
     if (!edgeMenu || !fileId) return;
     updateEdge(instanceId, fileId, edgeMenu.edgeId, {
@@ -731,7 +757,7 @@ export function LoreGraph({
     const len = Math.hypot(dx, dy) || 1;
     const lx = (sp.x + tp.x) / 2 + (-dy / len) * EDGE_LABEL_OFFSET;
     const ly = (sp.y + tp.y) / 2 + (dx / len) * EDGE_LABEL_OFFSET;
-    const editing = edgeMenu?.mode === "edit" && edgeMenu.edgeId === e.id;
+    const editing = inlineEdgeId === e.id;
     return (
       <g key={e.id}>
         {/* 命中层：透明粗线便于点击；单击选中高亮，双击就地编辑关系名 */}
@@ -751,8 +777,7 @@ export function LoreGraph({
           onDoubleClick={(ev) => {
             ev.stopPropagation();
             setSelectedEdgeId(e.id);
-            setEdgeDraft(e.label ?? "");
-            setEdgeMenu({ edgeId: e.id, mode: "edit", x: ev.clientX, y: ev.clientY });
+              startInlineEdgeEdit(e.id, e.label ?? "");
           }}
         />
         <line
@@ -765,17 +790,21 @@ export function LoreGraph({
           style={{ pointerEvents: "none" }}
         />
         {!editing && e.label && (
-          <text
-            x={lx}
-            y={ly}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill={e.labelColor ?? DEFAULT_LABEL_COLOR}
-            fontSize={11}
-            style={{ pointerEvents: "none", userSelect: "none" }}
-          >
-            {e.label}
-          </text>
+            <text
+              x={lx}
+              y={ly}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fill={e.labelColor ?? DEFAULT_LABEL_COLOR}
+              fontSize={11}
+              style={{ pointerEvents: "auto", cursor: "text", userSelect: "none" }}
+              onClick={(ev) => {
+                ev.stopPropagation();
+                startInlineEdgeEdit(e.id, e.label ?? "");
+              }}
+            >
+              {e.label}
+            </text>
         )}
       </g>
     );
@@ -817,6 +846,41 @@ export function LoreGraph({
           <svg className="absolute left-0 top-0 h-1 w-1 overflow-visible">
             {edgeLines}
           </svg>
+            {inlineEdgeId && (() => {
+              const edge = edges.find((x) => x.id === inlineEdgeId);
+              if (!edge) return null;
+              const s = cards.find((c) => c.id === edge.source);
+              const t = cards.find((c) => c.id === edge.target);
+              if (!s || !t) return null;
+              const sp = posFor(s);
+              const tp = posFor(t);
+              const dx = tp.x - sp.x;
+              const dy = tp.y - sp.y;
+              const len = Math.hypot(dx, dy) || 1;
+              const lx = (sp.x + tp.x) / 2 + (-dy / len) * EDGE_LABEL_OFFSET;
+              const ly = (sp.y + tp.y) / 2 + (dx / len) * EDGE_LABEL_OFFSET;
+              return (
+                <div className="absolute z-10" style={{ left: lx, top: ly, transform: "translate(-50%, -50%)" }}>
+                  <input
+                    autoFocus
+                    value={inlineEdgeDraft}
+                    onChange={(e) => setInlineEdgeDraft(e.target.value)}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onContextMenu={(e) => e.stopPropagation()}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onBlur={commitInlineEdge}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === "Enter") commitInlineEdge();
+                      if (e.key === "Escape") cancelInlineEdge();
+                    }}
+                    placeholder="关系名（可留空）"
+                      className="w-[140px] bg-transparent text-center text-xs font-medium outline-none border-none"
+                      style={{ width: 140, color: edge.labelColor ?? DEFAULT_LABEL_COLOR, caretColor: edge.labelColor ?? DEFAULT_LABEL_COLOR }}
+                  />
+                </div>
+              );
+            })()}
 
           {/* 节点卡片 */}
           {cards.map((c) => {
@@ -1001,7 +1065,7 @@ export function LoreGraph({
           <EdgeMenu
             x={edgeMenu.x}
             y={edgeMenu.y}
-            onEditMode={() => setEdgeMenu((m) => (m ? { ...m, mode: "edit" } : m))}
+            onEditMode={() => { const edge = edges.find((x) => x.id === edgeMenu?.edgeId); if (edge) startInlineEdgeEdit(edge.id, edge.label ?? ""); }}
             onReplaceColor={() =>
               openEdgeColorPicker(edgeMenu.edgeId, "color", edgeMenu.x, edgeMenu.y)
             }
@@ -1060,32 +1124,6 @@ export function LoreGraph({
           document.body,
         )}
 
-      {/* 线段关系名编辑（弹窗） */}
-      <Dialog open={edgeMenu?.mode === "edit"} onOpenChange={(open) => !open && setEdgeMenu(null)}>
-        <DialogContent className="w-[min(320px,92vw)]">
-          <DialogHeader>
-            <DialogTitle>编辑关系名</DialogTitle>
-          </DialogHeader>
-          <input
-            autoFocus
-            value={edgeDraft}
-            onChange={(e) => setEdgeDraft(e.target.value)}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === "Enter") saveEdgeLabel(edgeDraft);
-              if (e.key === "Escape") setEdgeMenu(null);
-            }}
-            placeholder="关系名（可留空）"
-            className="h-9 w-full rounded-lg border border-line bg-app px-2.5 text-sm text-fg outline-none placeholder:text-fg-muted/50 focus:border-accent/50"
-          />
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setEdgeMenu(null)}>
-              取消
-            </Button>
-            <Button onClick={() => saveEdgeLabel(edgeDraft)}>保存</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       {/* 关联时间轴弹窗（右键菜单入口） */}
       {assocCardId && fileId && (
         <LoreTimelineAssociationDialog
@@ -1201,36 +1239,40 @@ function CardMenu({
       />
       <div
         className="fixed z-50 w-[190px] overflow-hidden rounded-xl border border-line/70 bg-app shadow-pop"
-        style={pos}
+          style={pos}
       >
-        <div className="p-1">
-          <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold tracking-[0.14em] text-fg-muted">
-            {multi ? `已选 ${count} 个设定` : "设定操作"}
-          </div>
-          <button
-            onClick={onEdit}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg transition-colors hover:bg-hover"
-          >
-            <Pencil className="size-3.5 text-fg-muted" /> 编辑{multi ? "（当前卡）" : ""}
-          </button>
-          <button
-            onClick={onConnect}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg transition-colors hover:bg-hover"
-          >
-            <Link2 className="size-3.5 text-fg-muted" /> {multi ? "整体连接…" : "连接…"}
-          </button>
-          <button
-            onClick={onQuickConnect}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg transition-colors hover:bg-hover"
-          >
-            <MousePointer2 className="size-3.5 text-fg-muted" /> {multi ? "整体快速连接" : "快速连接"}
-          </button>
-          <button
-            onClick={onAssociate}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg transition-colors hover:bg-hover"
-          >
-            <Link2 className="size-3.5 text-fg-muted" /> 关联时间轴
-          </button>
+          <div className="p-1">
+            <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold tracking-[0.14em] text-fg-muted">
+              {multi ? `已选 ${count} 个设定` : "设定操作"}
+            </div>
+            {!multi && (
+              <button
+                onClick={onEdit}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg transition-colors hover:bg-hover"
+              >
+                <Pencil className="size-3.5 text-fg-muted" /> 编辑
+              </button>
+            )}
+            <button
+              onClick={onConnect}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg transition-colors hover:bg-hover"
+            >
+              <Link2 className="size-3.5 text-fg-muted" /> {multi ? "整体连接…" : "连接…"}
+            </button>
+            <button
+              onClick={onQuickConnect}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg transition-colors hover:bg-hover"
+            >
+              <MousePointer2 className="size-3.5 text-fg-muted" /> {multi ? "整体快速连接" : "快速连接"}
+            </button>
+            {!multi && (
+              <button
+                onClick={onAssociate}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg transition-colors hover:bg-hover"
+              >
+                <Link2 className="size-3.5 text-fg-muted" /> 关联时间轴
+              </button>
+            )}
           {multi && (
             <button
               onClick={onClearSel}
@@ -1277,7 +1319,7 @@ function PaneMenu({
       />
       <div
         className="fixed z-50 w-[150px] overflow-hidden rounded-xl border border-line/70 bg-app shadow-pop"
-        style={pos}
+          style={pos}
       >
         <button
           onClick={onCreate}
@@ -1326,7 +1368,7 @@ function EdgeMenu({
       />
       <div
         className="fixed z-50 w-[196px] overflow-hidden rounded-xl border border-line/70 bg-app shadow-pop"
-        style={pos}
+          style={pos}
       >
         <div className="p-1">
           <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold tracking-[0.14em] text-fg-muted">
@@ -1409,7 +1451,6 @@ function ConnectMenu({
 }) {
   const q = relSearch.trim().toLowerCase();
   const sourceIds = new Set(sources.map((s) => s.id));
-  // 已与任一来源相连的卡片不再作为可连接目标，避免重复建立连线
   const connectedIds = new Set<string>();
   for (const e of edges) {
     if (sourceIds.has(e.source)) connectedIds.add(e.target);
@@ -1419,17 +1460,15 @@ function ConnectMenu({
     (c) => !sourceIds.has(c.id) && !connectedIds.has(c.id) && c.title.toLowerCase().includes(q),
   );
   const multi = sources.length > 1;
-  // 单卡连接面板展示已有关联（可点击删除）；整体连接不展示
   const related = !multi
     ? edges.filter((e) => sourceIds.has(e.source) || sourceIds.has(e.target))
     : [];
 
-  const pos = clampMenu(x, y, 240, 400);
 
   return (
     <>
       <div
-        className="fixed inset-0 z-40"
+        className="fixed inset-0 z-40 bg-scrim/50"
         onClick={onClose}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -1437,11 +1476,10 @@ function ConnectMenu({
         }}
       />
       <div
-        className="fixed z-50 w-[240px] overflow-hidden rounded-xl border border-line/70 bg-app shadow-pop"
-        style={pos}
+          className="fixed left-1/2 top-1/2 z-50 flex h-[400px] w-[560px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-line/70 bg-app shadow-pop"
         onKeyDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-line/50 px-3 py-2">
+        <div className="flex shrink-0 items-center justify-between border-b border-line/50 px-3 py-2">
           <span className="flex items-center gap-1.5 text-xs font-semibold text-fg">
             <Link2 className="size-3.5 text-accent" />
             {multi ? `整体连接（${sources.length} 个）` : `连接「${sources[0]?.title ?? "…"}」`}
@@ -1451,91 +1489,106 @@ function ConnectMenu({
           </button>
         </div>
 
-        <div className="space-y-2 p-2.5">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2 top-1/2 size-3 -translate-y-1/2 text-fg-muted" />
-            <input
-              autoFocus
-              value={relSearch}
-              onChange={(e) => {
-                setRelSearch(e.target.value);
-                setTargetId(null);
-              }}
-              placeholder="搜索要连接的设定…"
-              className="h-7 w-full rounded-md border border-line/70 bg-app pl-7 pr-2 text-xs text-fg outline-none placeholder:text-fg-muted/50 focus:border-accent/40"
-            />
-          </div>
-          <div className="max-h-28 space-y-0.5 overflow-y-auto">
-            {filtered.slice(0, 8).map((c) => (
-              <button
-                key={c.id}
-                onClick={() => setTargetId(c.id)}
-                className={cn(
-                  "flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs transition-colors",
-                  targetId === c.id ? "bg-accent-soft text-accent" : "text-fg hover:bg-hover",
-                )}
-              >
-                <BookMarked className="size-3 shrink-0 text-fg-muted" />
-                <span className="truncate">{c.title || "未命名设定"}</span>
-              </button>
-            ))}
-            {filtered.length === 0 && (
-              <div className="px-2 py-2 text-center text-[11px] text-fg-muted">
-                {q ? "未找到匹配卡片" : "没有可连接的设定"}
-              </div>
-            )}
-          </div>
-
-          <input
-            value={relName}
-            onChange={(e) => setRelName(e.target.value)}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === "Enter" && targetId) onConnect();
-              if (e.key === "Escape") onClose();
-            }}
-            placeholder="关系名（如：师徒 / 敌对），可留空"
-            className="h-7 w-full rounded-md border border-line/70 bg-app px-2 text-xs text-fg outline-none placeholder:text-fg-muted/50 focus:border-accent/40"
-          />
-          <button
-            onClick={onConnect}
-            disabled={!targetId}
-            className="flex w-full items-center justify-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
-          >
-            <Link2 className="size-3.5" /> {multi ? `整体连接（${sources.length} → 1）` : "建立连接"}
-          </button>
-        </div>
-
-        {/* 单卡连接：已有关联（可点击删除） */}
-        {!multi && related.length > 0 && (
-          <div className="max-h-28 overflow-y-auto border-t border-line/50 p-1.5">
-            <div className="px-2 pb-1 pt-1 text-[10px] font-semibold tracking-[0.14em] text-fg-muted">
-              已有关联
+        <div className="flex min-h-0 flex-1">
+          {/* 左侧：已有关联 / 已选来源 */}
+          <div className="w-[200px] shrink-0 overflow-hidden border-r border-line/50">
+            <div className="px-3 pb-1 pt-2 text-[10px] font-semibold tracking-[0.14em] text-fg-muted">
+              {multi ? "已选来源" : "已有连接"}
             </div>
-            {related.slice(0, 5).map((e) => {
-              const other = candidates.find(
-                (c) => c.id === (sourceIds.has(e.source) ? e.target : e.source),
-              );
-              return (
-                <button
-                  key={e.id}
-                  onClick={() => onDeleteEdge(e.id)}
-                  title="点击删除该连线"
-                  className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] text-fg-muted transition-colors hover:bg-danger/10 hover:text-danger"
-                >
-                  <span
-                    className="size-2 shrink-0 rounded-full"
-                    style={{ background: e.color ?? DEFAULT_EDGE_COLOR }}
-                  />
-                  <span className="truncate">{other?.title ?? "…"}</span>
-                  {e.label && <span className="truncate text-fg-muted/70">· {e.label}</span>}
-                </button>
-              );
-            })}
+            <div className="space-y-0.5 px-1.5 pb-2">
+              {multi ? (
+                sources.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center gap-1.5 overflow-hidden rounded-md px-2 py-1 text-[11px] text-fg"
+                  >
+                    <BookMarked className="size-3 shrink-0 text-fg-muted" />
+                    <span className="truncate">{s.title || "未命名设定"}</span>
+                  </div>
+                ))
+              ) : related.length === 0 ? (
+                <div className="px-2 py-2 text-[11px] text-fg-muted">暂无关联</div>
+              ) : (
+                related.slice(0, 8).map((e) => {
+                  const other = candidates.find(
+                    (c) => c.id === (sourceIds.has(e.source) ? e.target : e.source),
+                  );
+                  return (
+                    <button
+                      key={e.id}
+                      onClick={() => onDeleteEdge(e.id)}
+                      title="点击删除该连线"
+                      className="flex w-full items-center gap-1.5 overflow-hidden rounded-md px-2 py-1 text-left text-[11px] text-fg-muted transition-colors hover:bg-danger/10 hover:text-danger"
+                    >
+                      <span
+                        className="size-2 shrink-0 rounded-full"
+                        style={{ background: e.color ?? DEFAULT_EDGE_COLOR }}
+                      />
+                      <span className="truncate">{other?.title ?? "…"}</span>
+                      {e.label && <span className="truncate text-fg-muted/70">· {e.label}</span>}
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </div>
-        )}
+
+          {/* 右侧：搜索 / 选择 / 关系名 / 连接 */}
+          <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-hidden p-2.5">
+            <div className="relative shrink-0">
+              <Search className="pointer-events-none absolute left-2 top-1/2 size-3 -translate-y-1/2 text-fg-muted" />
+              <input
+                autoFocus
+                value={relSearch}
+                onChange={(e) => {
+                  setRelSearch(e.target.value);
+                  setTargetId(null);
+                }}
+                placeholder="搜索要连接的设定…"
+                className="h-7 w-full rounded-md border border-line/70 bg-app pl-7 pr-2 text-xs text-fg outline-none placeholder:text-fg-muted/50 focus:border-accent/40"
+              />
+            </div>
+            <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1">
+              {filtered.slice(0, 12).map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setTargetId(c.id)}
+                  className={cn(
+                    "flex w-full items-center gap-1.5 overflow-hidden rounded-md px-2 py-1 text-left text-xs transition-colors",
+                    targetId === c.id ? "bg-accent-soft text-accent" : "text-fg hover:bg-hover",
+                  )}
+                >
+                  <BookMarked className="size-3 shrink-0 text-fg-muted" />
+                  <span className="truncate">{c.title || "未命名设定"}</span>
+                </button>
+              ))}
+              {filtered.length === 0 && (
+                <div className="px-2 py-2 text-center text-[11px] text-fg-muted">
+                  {q ? "未找到匹配卡片" : "没有可连接的设定"}
+                </div>
+              )}
+            </div>
+            <input
+              value={relName}
+              onChange={(e) => setRelName(e.target.value)}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Enter" && targetId) onConnect();
+                if (e.key === "Escape") onClose();
+              }}
+              placeholder="关系名（如：师徒 / 敌对），可留空"
+              className="h-7 w-full shrink-0 rounded-md border border-line/70 bg-app px-2 text-xs text-fg outline-none placeholder:text-fg-muted/50 focus:border-accent/40"
+            />
+            <button
+              onClick={onConnect}
+              disabled={!targetId}
+              className="flex w-full shrink-0 items-center justify-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
+            >
+              <Link2 className="size-3.5" /> {multi ? `整体连接（${sources.length} → 1）` : "建立连接"}
+            </button>
+          </div>
+        </div>
       </div>
     </>
   );
 }
-

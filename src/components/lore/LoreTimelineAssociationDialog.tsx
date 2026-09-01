@@ -1,11 +1,11 @@
 // 设定库侧「关联时间轴」弹窗（设定卡片 ↔ 时间轴文件）。
-// 打开时不切换宿主侧栏；点击文件行直接关联。
+// 固定宽高左右结构，与添加标签面板一致：编辑区显示阴影遮罩。
 
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link2, Search, X } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAssociationStore } from "@/stores/associationStore";
-import { getAllTimelineFiles, getFileRefsForCard, findLoreCard, openTimelineFromLoreFile } from "@/lib/associationUtils";
+import { getAllTimelineFiles, getFileRefsForCard, openTimelineFromLoreFile } from "@/lib/associationUtils";
 
 export function LoreTimelineAssociationDialog({
   loreInstanceId,
@@ -39,59 +39,60 @@ export function LoreTimelineAssociationDialog({
     association.unlink(loreInstanceId, timelineFileId, cardId);
   };
 
-  return (
-    <Dialog open modal={false} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="w-[min(560px,92vw)] !bg-app">
-        <DialogHeader>
-          <DialogTitle>关联时间轴</DialogTitle>
-        </DialogHeader>
+  return createPortal(
+    <>
+      <div className="fixed inset-0 z-[60] bg-scrim/50" onPointerDown={onClose} />
+      <div className="fixed left-1/2 top-1/2 z-[70] flex h-[400px] w-[560px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-line/70 bg-app shadow-pop">
+        <div className="flex shrink-0 items-center justify-between border-b border-line/50 px-3.5 py-2">
+          <span className="text-xs font-semibold tracking-wide text-fg">关联时间轴</span>
+          <button
+            onClick={onClose}
+            title="关闭"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
 
-        <div className="space-y-3">
-          {/* 当前已关联列表 */}
-          <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <span className="text-[11px] font-semibold tracking-[0.14em] text-fg-muted">
-                已关联 {linked.length} 条时间轴
-              </span>
-              {linked.length > 0 && <span className="text-[10px] text-fg-muted/60">点击可跳转，右侧移除</span>}
+        <div className="flex min-h-0 flex-1">
+          {/* 左侧：已关联，纵向排列、左对齐、右侧截断 */}
+          <div className="w-48 shrink-0 overflow-hidden border-r border-line/50">
+            <div className="px-3 pb-1 pt-2 text-[11px] font-semibold tracking-[0.14em] text-fg-muted">
+              已关联 {linked.length}
             </div>
-            {linked.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-line/70 px-3 py-2 text-xs text-fg-muted">
-                暂无关联，可从下方选择时间轴文件。
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {linked.map((f) => (
-                  <span
+            <div className="space-y-0.5 px-1.5 pb-2">
+              {linked.length === 0 ? (
+                <div className="px-2 py-2 text-[11px] text-fg-muted">暂无关联</div>
+              ) : (
+                linked.map((f) => (
+                  <div
                     key={f.fileId}
-                    className="group flex shrink-0 items-center gap-1 rounded px-2 py-1 text-[11px] font-medium cursor-pointer bg-accent-soft text-accent transition-opacity hover:opacity-80"
-                    onClick={() => openTimelineFromLoreFile(f.fileId)}
-                    title={`打开「${f.title}」`}
+                    className="group flex w-full items-center gap-1.5 overflow-hidden rounded-md px-2 py-1 text-[11px] font-medium text-accent"
                   >
-                    <Link2 className="size-3" />
-                    {f.instanceName} / {f.title}
+                    <Link2 className="size-3 shrink-0" />
+                    <button
+                      className="min-w-0 flex-1 truncate text-left"
+                      title={`打开「${f.title}」`}
+                      onClick={() => openTimelineFromLoreFile(f.fileId)}
+                    >
+                      {f.instanceName} / {f.title}
+                    </button>
                     <button
                       title="移除关联"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        unlink(f.fileId);
-                      }}
-                      className="flex h-4 w-4 items-center justify-center rounded text-fg-muted hover:bg-hover hover:text-fg"
+                      onClick={() => unlink(f.fileId)}
+                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-fg-muted hover:bg-hover hover:text-fg"
                     >
                       <X className="size-3" />
                     </button>
-                  </span>
-                ))}
-              </div>
-            )}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
 
-          {/* 可选文件列表（点击关联） */}
-          <div>
-            <div className="mb-1.5 text-[11px] font-semibold tracking-[0.14em] text-fg-muted">
-              可关联的时间轴文件
-            </div>
-            <div className="relative mb-1.5">
+          {/* 右侧：可关联文件，按内容自适应 */}
+          <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-hidden p-2.5">
+            <div className="relative shrink-0">
               <Search className="pointer-events-none absolute left-2 top-1/2 size-3 -translate-y-1/2 text-fg-muted" />
               <input
                 value={search}
@@ -100,30 +101,29 @@ export function LoreTimelineAssociationDialog({
                 className="h-7 w-full rounded-md border border-line/70 !bg-app pl-6 pr-1.5 text-[11px] text-fg outline-none placeholder:text-fg-muted/50 focus:!bg-app focus:border-accent/40"
               />
             </div>
-            <div className="max-h-[260px] overflow-y-auto rounded-lg border border-line/70 p-1.5">
+            <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1">
               {visible.length === 0 ? (
                 <div className="px-2 py-4 text-center text-xs text-fg-muted">
                   {timelineFiles.length === 0 ? "暂无启用的时间轴实例/文件" : "没有更多可关联的时间轴文件"}
                 </div>
               ) : (
-                <div className="flex flex-col gap-0.5">
-                  {visible.map((f) => (
-                    <button
-                      key={f.fileId}
-                      onClick={() => link(f.fileId)}
-                      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg transition-colors hover:bg-hover"
-                    >
-                      <Link2 className="size-3.5 shrink-0 text-fg-muted" />
-                      <span className="min-w-0 flex-1 truncate">{f.title}</span>
-                      <span className="shrink-0 text-[10px] text-fg-muted/60">{f.instanceName}</span>
-                    </button>
-                  ))}
-                </div>
+                visible.map((f) => (
+                  <button
+                    key={f.fileId}
+                    onClick={() => link(f.fileId)}
+                    className="flex w-full items-center gap-2 overflow-hidden rounded-md px-2 py-1.5 text-left text-xs text-fg transition-colors hover:bg-hover"
+                  >
+                    <Link2 className="size-3.5 shrink-0 text-fg-muted" />
+                    <span className="min-w-0 flex-1 truncate">{f.title}</span>
+                    <span className="shrink-0 text-[10px] text-fg-muted/60">{f.instanceName}</span>
+                  </button>
+                ))
               )}
             </div>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </>,
+    document.body,
   );
 }

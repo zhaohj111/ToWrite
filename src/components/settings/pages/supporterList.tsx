@@ -6,7 +6,7 @@
 // 作者只需每行写一个名字（- 名字），无需用 Tab/空格拉开间距（Markdown 会折叠空白）。
 // 其它块（标题/段落）正常渲染；含引用/代码块/表格等复杂语法时回退为通用 Markdown 渲染。
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { cn } from "@/lib/cn";
 import { Markdown } from "@/components/ui/markdown";
 import { useUpdateStore } from "@/stores/updateStore";
@@ -100,6 +100,15 @@ function parseSupporter(source: string): SupporterBlock[] {
 
 export function SupporterListPage() {
   const supporter = useUpdateStore((s) => s.supporter);
+  const supporterLoading = useUpdateStore((s) => s.supporterLoading);
+  const supporterChecked = useUpdateStore((s) => s.supporterChecked);
+
+  // 打开本页时拉取（远程优先；每次会话仅拉取一次）
+  useEffect(() => {
+    if (!supporterChecked && !supporterLoading) {
+      void useUpdateStore.getState().fetchSupporter();
+    }
+  }, [supporterChecked, supporterLoading]);
 
   // 含引用/代码块/表格等复杂语法时回退到通用 Markdown 渲染（保证不失真）
   const needsMarkdown = useMemo(
@@ -107,8 +116,11 @@ export function SupporterListPage() {
     [supporter],
   );
 
+  if (supporterLoading && !supporterChecked) {
+    return <div className="text-sm text-fg-muted">支持者名单加载中…</div>;
+  }
   if (supporter == null) {
-    return <div className="text-sm text-fg-muted">支持者名单暂不可用</div>;
+    return <div className="text-sm text-fg-muted">暂无支持者名单</div>;
   }
 
   if (needsMarkdown) {

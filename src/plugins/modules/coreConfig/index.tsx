@@ -289,8 +289,8 @@ ctx.registerContribution("settings.pages", {
         {
           id: "list",
           title: "支持者名单",
-          description: "本项目赞助者名单（启动时从仓库根目录 Supporter.md 拉取，文件不存在时不显示）。",
-          keywords: ["支持者", "名单", "赞助", "supporter", "榜单", "致谢"],
+          description: "本项目赞助者名单（打开页面时从仓库根目录 Supporter.md 拉取，失败回退本地，均无效显示暂无）。",
+          keywords: ["支持者", "名单", "赞助", "supporter", "榜单", "致谢", "暂无"],
           scope: "app",
           path: "关于 > 支持者名单",
           render: () => null,

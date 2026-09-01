@@ -280,6 +280,33 @@ function TimelineCanvas({
   const sizesRef = useRef<Record<string, { w: number; h: number }>>({});
   const controlRef = useRef<HTMLDivElement>(null);
 
+  const legendScrollRef = useRef<HTMLDivElement>(null);
+  const legendDragRef = useRef<{ startClientX: number; startLeft: number; moved: boolean } | null>(null);
+  const startLegendDrag = (e: React.PointerEvent) => {
+    if (e.button !== 0 || e.pointerType !== "mouse") return;
+    if ((e.target as HTMLElement).closest("button, input")) return;
+    const el = legendScrollRef.current;
+    legendDragRef.current = { startClientX: e.clientX, startLeft: el?.scrollLeft ?? 0, moved: false };
+  };
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const d = legendDragRef.current;
+      if (!d) return;
+      const dx = e.clientX - d.startClientX;
+      if (!d.moved && Math.abs(dx) < 4) return;
+      d.moved = true;
+      const el = legendScrollRef.current;
+      if (el) el.scrollLeft = d.startLeft - dx;
+    };
+    const onUp = () => { legendDragRef.current = null; };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, []);
   const [vw, setVw] = useState(0);
   const [vh, setVh] = useState(0);
   const [view, setView] = useState({ x: 0, y: 0, zoom: 1 });
@@ -792,12 +819,9 @@ function TimelineCanvas({
     axisX1 = Math.max(axisX1, n.x + 120);
   }
 
-  // —— 右上角图例：动态列数（不遮左上角控制区）——
-  const controlW = controlRef.current?.offsetWidth ?? 200;
-  const availableW = Math.max(vw - controlW - 48, 120);
-  const maxColumns = clamp(Math.floor(availableW / LEGEND_COL_WIDTH), 1, 12);
-  const shownLegend = colorLegend.slice(0, maxColumns * LEGEND_ROWS);
-  const hiddenLegendCount = colorLegend.length - shownLegend.length;
+    // —— 右上角图例：只显示当前文件使用到的颜色 ——
+    const shownLegend = colorLegend.filter((l) => nodes.some((n) => n.color === l.color));
+    const hiddenLegendCount = 0;
 
   // 点阵背景
   const gap = Math.max(DOT_GAP * view.zoom, 1);
@@ -1002,19 +1026,22 @@ function TimelineCanvas({
           </button>
         </div>
 
-        {/* 右上角：颜色图例（工具栏「图例开关」控制显示，最多 5 行换列，列数动态上限） */}
+        {/* 右上角：颜色图例（只显示当前文件使用的颜色，过多可左右拖动） */}
         {legendVisible && (
-          <div data-overlay className="absolute right-3 top-3 z-10">
+          <div data-overlay className="absolute right-3 top-3 z-10 max-w-[300px]">
             <div className="rounded-xl border border-line/70 bg-app/95 p-3 text-xs shadow-pop backdrop-blur-sm">
               <div className="mb-2 flex items-center gap-2 font-semibold tracking-wide text-fg">
                 <span className="size-1.5 rounded-full bg-accent" />
                 颜色图例
               </div>
               <div
-                className="grid gap-x-3.5 gap-y-2"
-                style={{ gridAutoFlow: "column", gridTemplateRows: `repeat(${LEGEND_ROWS}, auto)` }}
+                ref={legendScrollRef}
+                onPointerDown={startLegendDrag}
+                className="hidden-scrollbar flex cursor-grab items-center gap-1.5 overflow-x-auto active:cursor-grabbing"
               >
-                {shownLegend.map((l) => (
+                {shownLegend.length === 0 ? (
+                  <span className="text-[10px] text-fg-muted/60">暂无使用中的图例</span>
+                ) : shownLegend.map((l) => (
                   <button
                     key={l.id}
                     title={l.hidden ? "点击显示该颜色" : "点击隐藏该颜色"}
@@ -1023,7 +1050,7 @@ function TimelineCanvas({
                       setLegendHidden(instanceId, l.id, !l.hidden);
                     }}
                     className={cn(
-                      "flex items-center gap-1.5 rounded-md px-1 text-left transition-colors",
+                      "flex shrink-0 items-center gap-1.5 rounded-md px-1 text-left transition-colors",
                       l.hidden ? "opacity-40" : "text-fg-muted hover:text-fg",
                     )}
                   >
@@ -1035,15 +1062,9 @@ function TimelineCanvas({
                   </button>
                 ))}
               </div>
-              {hiddenLegendCount > 0 && (
-                <div className="mt-1.5 border-t border-line/50 pt-1.5 text-[10px] text-fg-muted/70">
-                  另有 {hiddenLegendCount} 项未显示（见工具栏「颜色管理」）
-                </div>
-              )}
             </div>
           </div>
         )}
-
         {/* 右下角：导出 / 导入（v0.7） */}
         <div data-overlay className="absolute bottom-3 right-3 z-10 flex overflow-hidden rounded-lg border border-line/70 bg-app/90 shadow-sm">
           <DropdownMenu>
