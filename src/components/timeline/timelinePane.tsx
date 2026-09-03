@@ -316,6 +316,8 @@ function TimelineCanvas({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState("");
+  /** 本轮「右键空白新建标签」创建的节点 id：命名提交与创建同属一步撤销（创建时已入栈快照，提交不重复入栈） */
+  const creationRef = useRef<string | null>(null);
   const [dragging, setDragging] = useState<null | "pan" | string>(null);
   /** 框选选中的标签集合 */
   const [boxSel, setBoxSel] = useState<Set<string>>(new Set());
@@ -498,17 +500,21 @@ function TimelineCanvas({
       const n = doc.nodes.find((x) => x.id === editingId);
       if (n) {
         const label = editingDraft.trim();
+        // 新建标签的命名/空白提交与创建同属一步撤销：创建时快照已入栈，提交时不重复入栈，
+        // 否则撤销会先退回「空标签」中间态，需要二次撤销才能真正撤销
+        const isJustCreated = creationRef.current === n.id;
         if (label) {
           if (label !== n.label) {
-            record(instanceId);
+            if (!isJustCreated) record(instanceId);
             updateNode(instanceId, fileId, n.id, { label });
           }
         } else {
-          record(instanceId);
+          if (!isJustCreated) record(instanceId);
           deleteNode(instanceId, fileId, n.id);
         }
       }
     }
+    if (editingId === creationRef.current) creationRef.current = null;
     setEditingId(null);
   };
   const cancelEdit = () => {
@@ -516,9 +522,11 @@ function TimelineCanvas({
       const n = doc.nodes.find((x) => x.id === editingId);
       if (n && n.label.trim() === "") deleteNode(instanceId, fileId, editingId);
     }
+    if (editingId === creationRef.current) creationRef.current = null;
     setEditingId(null);
   };
   const startEdit = (id: string, label: string) => {
+    creationRef.current = null;
     cleanupSelected();
     setSelectedId(id);
     setEditingId(id);
@@ -736,9 +744,13 @@ function TimelineCanvas({
     const wy = (e.clientY - r.top - v.y) / v.zoom;
     // 若上一处新建仍处于编辑状态，先提交（或删除空白）再新建，避免空白标签遗留
     commitLabel();
+    // 新建标签：创建前入栈快照（命名提交/空白删除与创建同属一步撤销，见 commitLabel）
     record(instanceId);
     const created = addNode(instanceId, fileId, wx, wy, currentColorRef.current);
-    if (created) startEdit(created.id, "");
+    if (created) {
+      startEdit(created.id, "");
+      creationRef.current = created.id;
+    }
   };
 
   // —— 右键标签弹窗动作 ——
@@ -749,6 +761,7 @@ function TimelineCanvas({
       const n = doc.nodes.find((x) => x.id === id);
       if (n) {
         // 直接进入就地编辑（不经 startEdit 的 cleanupSelected，避免误删空白标签）
+        creationRef.current = null;
         setSelectedId(id);
         setEditingId(id);
         setEditingDraft(n.label);
@@ -911,6 +924,7 @@ function TimelineCanvas({
                   // 左键双击标签快速编辑文字（直接进入就地编辑，避免误删空白标签）
                   e.stopPropagation();
                   if (isEditing) return;
+                  creationRef.current = null;
                   setSelectedId(n.id);
                   setEditingId(n.id);
                   setEditingDraft(n.label);
