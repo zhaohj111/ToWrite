@@ -294,6 +294,12 @@ export function EditorPane() {
     const storedContents = st.getSlice(instanceId).contents;
     const doc = currentId ? storedContents[currentId] ?? emptyChapterDoc() : emptyChapterDoc();
     editor.commands.setContent(doc, false);
+    // 新章/空章（正文除章节名 H1 外无内容）：切换后直接聚焦正文、光标落在文末，无需点击即可输入
+    const bodyText = editor.state.doc.content.content
+      .slice(1)
+      .map((n) => n.textContent ?? "")
+      .join("");
+    if (currentId && bodyText.trim() === "") editor.commands.focus("end");
   }, [editor, currentId, contents]);
 
   // 重命名当前章节后，实时同步正文首部 H1 为章节名；切换章节时不动正文

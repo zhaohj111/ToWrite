@@ -62,7 +62,8 @@ type DialogState =
   | { type: "create" }
   | { type: "rename"; id: string }
   | { type: "note"; id: string }
-  | { type: "delete"; id: string };
+  | { type: "delete"; id: string }
+  | { type: "created"; id: string; name: string };
 
 /** 操作栏固定高度（px），参与头部高度与补偿计算 */
 const OPS_H = 52;
@@ -141,9 +142,15 @@ export function StartPage() {
   const submit = async () => {
     if (!dlg) return;
     switch (dlg.type) {
-      case "create":
-        await createProject(name);
+      case "create": {
+        const meta = await createProject(name);
+        // 新建成功：弹窗询问是否直接打开（不走顶部通知）
+        if (meta) {
+          setDlg({ type: "created", id: meta.id, name });
+          return;
+        }
         break;
+      }
       case "rename":
         await renameProject(dlg.id, name);
         break;
@@ -157,7 +164,7 @@ export function StartPage() {
     setDlg(null);
   };
 
-  const target = dlg && dlg.type !== "create" ? projects.find((p) => p.id === dlg.id) : null;
+  const target = dlg && dlg.type !== "create" && dlg.type !== "created" ? projects.find((p) => p.id === dlg.id) : null;
 
   return (
     <div ref={pageRef} className="hidden-scrollbar h-full overflow-y-auto">
@@ -349,6 +356,16 @@ export function StartPage() {
                 />
               </>
             )}
+            {dlg?.type === "created" && (
+              <>
+                <DialogHeader>
+                  <DialogTitle>工程已创建</DialogTitle>
+                  <DialogDescription>
+                    「{dlg.name}」已就绪，是否立即打开？
+                  </DialogDescription>
+                </DialogHeader>
+              </>
+            )}
             {dlg?.type === "rename" && (
               <>
                 <DialogHeader>
@@ -390,10 +407,27 @@ export function StartPage() {
               </>
             )}
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setDlg(null)}>
-                取消
-              </Button>
-              {dlg?.type === "delete" ? (
+              {dlg?.type !== "created" && (
+                <Button variant="ghost" onClick={() => setDlg(null)}>
+                  取消
+                </Button>
+              )}
+              {dlg?.type === "created" ? (
+                <>
+                  <Button variant="ghost" onClick={() => setDlg(null)}>
+                    稍后再说
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      const id = dlg.id;
+                      setDlg(null);
+                      void openProjectById(id);
+                    }}
+                  >
+                    打开
+                  </Button>
+                </>
+              ) : dlg?.type === "delete" ? (
                 <Button variant="destructive" onClick={() => void submit()}>
                   <Trash2 className="size-4" /> 删除
                 </Button>
