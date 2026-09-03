@@ -135,7 +135,7 @@ export function LegendManager({
   return (
     <div
       data-overlay
-      className="absolute left-1/2 top-2 z-40 flex max-h-[min(540px,82vh)] w-[min(680px,94vw)] -translate-x-1/2 select-none flex-col overflow-hidden rounded-xl border border-line/70 bg-app shadow-pop"
+      className="absolute left-1/2 top-0 z-40 -translate-x-1/2 flex max-h-[min(540px,82vh)] w-[min(680px,94vw)] select-none flex-col overflow-hidden rounded-xl border border-line/70 bg-app shadow-pop"
     >
       {/* 头部：标题 + 当前使用颜色 + 关闭 */}
       <div className="flex items-center justify-between border-b border-line/50 px-3.5 py-2">

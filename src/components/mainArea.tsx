@@ -152,6 +152,21 @@ export function MainArea() {
             }}
           />
         )}
+        {/* 时间轴面板浮层锚点：贴齐工具栏下、在自定义区域内水平居中 */}
+        {active?.prototypeId === "core.timeline" && (
+          <div className="relative z-40">
+            {legendOpen && (
+              <LegendManager instanceId={active.instanceId} onClose={() => setLegendOpen(false)} />
+            )}
+            {assocOpen && timelineFileId && (
+              <TimelineAssociationPanel
+                instanceId={active.instanceId}
+                fileId={timelineFileId}
+                onClose={() => setAssocOpen(false)}
+              />
+            )}
+          </div>
+        )}
         {/* 时间轴关联 chips：当前文件关联的设定卡片（横向拖动浏览） */}
           {active?.prototypeId === "core.timeline" && timelineFileId && (
             <div ref={timelineChipsRef} onPointerDown={startTimelineChipsDrag} className="hidden-scrollbar flex h-10 shrink-0 cursor-grab items-center gap-1 overflow-x-auto border-b border-line/60 bg-app px-3 active:cursor-grabbing">
@@ -190,6 +205,14 @@ export function MainArea() {
             }}
           />
         )}
+        {/* 设定库面板浮层锚点：贴齐工具栏下、在自定义区域内水平居中 */}
+        {active?.prototypeId === "core.lore" && (
+          <div className="relative z-40">
+            {tagOpen && (
+              <TagManager instanceId={active.instanceId} onClose={() => setTagOpen(false)} />
+            )}
+          </div>
+        )}
       <div key={active?.id ?? "empty"} className="anim-tab relative min-h-0 flex-1 overflow-hidden">
         {active ? (
           <EditorInstanceProvider value={active.instanceId}>
@@ -200,20 +223,7 @@ export function MainArea() {
             暂无可用主视图（可选中时间轴模块）
           </div>
         )}
-        {active?.prototypeId === "core.timeline" && legendOpen && (
-          <LegendManager instanceId={active.instanceId} onClose={() => setLegendOpen(false)} />
-        )}
-        {active?.prototypeId === "core.lore" && tagOpen && (
-          <TagManager instanceId={active.instanceId} onClose={() => setTagOpen(false)} />
-        )}
       </div>
-          {active?.prototypeId === "core.timeline" && assocOpen && timelineFileId && (
-            <TimelineAssociationPanel
-              instanceId={active.instanceId}
-              fileId={timelineFileId}
-              onClose={() => setAssocOpen(false)}
-            />
-          )}
     </div>
   );
 }

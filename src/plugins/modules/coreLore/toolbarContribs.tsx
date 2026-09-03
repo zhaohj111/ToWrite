@@ -131,6 +131,7 @@ export function registerLoreToolbar(ctx: PluginContext): void {
     id: "tags",
     title: "标签管理",
     icon: Tags,
+    isActive: ({ openPanelId }) => openPanelId === "tags",
     action: ({ openPanel }) => openPanel("tags"),
   });
 }
