@@ -8,6 +8,7 @@ import timelineChangelog from "./CHANGELOG.md?raw";
 import timelineSettings from "./settings.json";
 import { TimelinePane } from "@/components/timeline/timelinePane";
 import { TimelineSidebar } from "@/components/timeline/timelineSidebar";
+import { registerTimelineToolbar } from "./toolbarContribs";
 
 export const coreTimelineModule: ModuleContract = {
   id: "core.timeline",
@@ -18,7 +19,7 @@ export const coreTimelineModule: ModuleContract = {
   kind: "heavy",
   enabled: true,
   author: "拓文官方",
-  version: "0.7.0",
+  version: "0.6.2",
   // 侧栏命名配置（文件名 / 文件夹名）出厂默认在 settings.json
   settings: timelineSettings as unknown as Record<string, SettingFieldDef>,
   views: {
@@ -26,7 +27,8 @@ export const coreTimelineModule: ModuleContract = {
     sidebars: [{ id: "timeline-files", title: "时间轴文件", component: TimelineSidebar }],
     mainView: { id: "timeline", title: "时间轴", component: TimelinePane },
   },
-  activate: () => {
-    // v0.7 骨架：暂无额外贡献点。
+  activate: (ctx) => {
+    // 视图工具栏（撤销/重做、图例、颜色管理、关联管理）注册于 ./toolbarContribs
+    registerTimelineToolbar(ctx);
   },
 };

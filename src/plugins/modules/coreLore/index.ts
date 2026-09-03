@@ -9,6 +9,7 @@ import loreChangelog from "./CHANGELOG.md?raw";
 import loreSettings from "./settings.json";
 import { LoreSidebar } from "@/components/lore/loreSidebar";
 import { LorePane } from "@/components/lore/lorePane";
+import { registerLoreToolbar } from "./toolbarContribs";
 
 export const coreLoreModule: ModuleContract = {
   id: "core.lore",
@@ -19,7 +20,7 @@ export const coreLoreModule: ModuleContract = {
   kind: "heavy",
   enabled: true,
   author: "拓文官方",
-  version: "0.7.0",
+  version: "0.6.2",
   // 侧栏命名配置（文件名 / 文件夹名）出厂默认在 settings.json
   settings: loreSettings as unknown as Record<string, SettingFieldDef>,
   views: {
@@ -28,10 +29,7 @@ export const coreLoreModule: ModuleContract = {
     mainView: { id: "lore", title: "设定库", component: LorePane },
   },
   activate: (ctx) => {
-    ctx.registerContribution("sidebar.views", {
-      id: "lore",
-      title: "设定库",
-      component: LoreSidebar,
-    });
+    // 视图工具栏（撤销/重做、布局切换、连线/文本颜色、标签管理）注册于 ./toolbarContribs
+    registerLoreToolbar(ctx);
   },
 };

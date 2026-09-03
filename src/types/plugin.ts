@@ -10,6 +10,8 @@ export type ContributionPoint =
   | "editor.commands"
   | "editor.hoverActions"
   | "editor.blockTypes"
+  | "timeline.toolbar"
+  | "lore.toolbar"
   | "sidebar.views"
   | "theme"
   | "i18n.resources"
@@ -49,6 +51,41 @@ export interface ToolbarItem {
   groupId?: string;
 }
 
+/**
+ * 视图工具栏上下文（时间轴/设定库等非编辑器主视图的工具行动作参数）：
+ * 由宿主（MainArea）注入当前实例 id、状态与回调，贡献条目据此渲染与执行。
+ */
+export interface ViewToolbarContext {
+  /** 当前插件实例 id */
+  instanceId: string;
+  /** 打开宿主浮层面板（timeline: legend / assoc；lore: tags） */
+  openPanel: (panel: "legend" | "tags" | "assoc") => void;
+  /** 当前打开的宿主面板（供 isActive 判断） */
+  openPanelId?: string | null;
+  /** 时间轴：图例显隐状态 / 当前使用颜色 */
+  legendVisible?: boolean;
+  currentColor?: string;
+  /** 设定库：当前实际布局（含强制网格规则）/ 连线与关系文本颜色 */
+  layout?: "graph" | "grid";
+  edgeColor?: string;
+  edgeLabelColor?: string;
+  onSetEdgeColor?: (color: string) => void;
+  onSetEdgeLabelColor?: (color: string) => void;
+  /** 设定库：切换布局（宿主按实际规则执行并回注 layout） */
+  onToggleLayout?: () => void;
+}
+
+/** 视图工具栏条目（与编辑器工具栏同构，但上下文为实例级宿主服务） */
+export interface ViewToolbarItem {
+  id: string;
+  title: string;
+  icon?: LucideIcon;
+  divider?: boolean;
+  isActive?: (ctx: ViewToolbarContext) => boolean;
+  /** 自定义内联渲染（优先于 icon/action），可嵌入色块等交互组件 */
+  render?: (ctx: ViewToolbarContext) => ReactNode;
+  action?: (ctx: ViewToolbarContext) => void;
+}
 export interface CommandItem {
   id: string;
   title: string;
@@ -90,6 +127,8 @@ export interface ContributionMap {
   "editor.commands": CommandItem;
   "editor.hoverActions": HoverAction;
   "editor.blockTypes": BlockType;
+  "timeline.toolbar": ViewToolbarItem;
+  "lore.toolbar": ViewToolbarItem;
   "sidebar.views": SidebarViewContribution;
   "theme": ThemeContribution;
   "i18n.resources": I18nResourceContribution;

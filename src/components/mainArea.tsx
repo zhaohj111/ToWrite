@@ -3,22 +3,16 @@
 // 其他实例显示其自身标签；插件切换由左侧 Activity Bar 完成。
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 import {
   BookMarked,
   CalendarRange,
   FileText,
-  Grid3x3,
-  Layers,
   Link2,
-  Palette,
-  Redo2,
-  Share2,
-  Tags,
-  Undo2,
   X,
 } from "lucide-react";
 import { useMainViews } from "@/plugins/hooks";
+import { pluginRegistry } from "@/plugins/registry";
+import type { ViewToolbarContext, ViewToolbarItem } from "@/types/plugin";
 import { useLayoutStore } from "@/stores/layoutStore";
 import { useEditorStore, EMPTY_SLICE } from "@/stores/editorStore";
 import { useTimelineStore, EMPTY_TIMELINE_SLICE } from "@/stores/timelineStore";
@@ -27,13 +21,11 @@ import { useTimelineUiStore } from "@/stores/timelineUiStore";
 import { useLoreStore, EMPTY_LORE_SLICE } from "@/stores/loreStore";
 import { useLoreUiStore } from "@/stores/loreUiStore";
 import { EditorInstanceProvider } from "@/components/editor/editorInstanceContext";
-import { requestLoreRedo, requestLoreUndo } from "@/lib/loreBus";
 import { requestTimelineUndo, requestTimelineRedo } from "@/lib/timelineBus";
 import { getCardRefsForTimelineFile, openLoreFromTimelineCard } from "@/lib/associationUtils";
 import { LegendManager } from "@/components/timeline/legendManager";
 import { TimelineAssociationPanel } from "@/components/timeline/timelineAssociationPanel";
 import { TagManager } from "@/components/lore/tagManager";
-import { ColorPickerPanel } from "@/components/ui/colorPicker";
 import { cn } from "@/lib/cn";
 import type { ChapterMeta, LoreFileMeta, TimelineFileMeta } from "@/types/writeproj";
 
@@ -144,67 +136,23 @@ export function MainArea() {
           )
         )}
       </TabStrip>
-        {/* 时间轴工具行：文件标签下方（间距与编辑器工具栏一致）。
-            概览/适应已移至画布左下角缩放控件，此处保留图例开关与颜色管理（含当前使用颜色指示）。 */}
+        {/* 时间轴工具行：timeline.toolbar 贡献点注册渲染（撤销/重做、图例、颜色管理、关联管理） */}
         {active?.prototypeId === "core.timeline" && (
-          <div className="flex h-10 shrink-0 items-center gap-0.5 border-b border-line/60 bg-app px-2">
-            <button
-              title="撤销"
-              onClick={() => requestTimelineUndo(active.instanceId)}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-all duration-150 hover:bg-hover hover:text-fg active:scale-95"
-            >
-              <Undo2 className="size-4" />
-            </button>
-            <button
-              title="重做"
-              onClick={() => requestTimelineRedo(active.instanceId)}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-all duration-150 hover:bg-hover hover:text-fg active:scale-95"
-            >
-              <Redo2 className="size-4" />
-            </button>
-            <span className="mx-1.5 h-4 w-px bg-line" />
-            <button
-              title={legendVisible ? "隐藏图例" : "显示图例"}
-              onClick={() => setLegendVisible(!legendVisible)}
-              className={cn(
-                "flex h-7 w-7 items-center justify-center rounded-md transition-all duration-150 active:scale-95",
-                legendVisible
-                  ? "bg-accent-soft text-accent"
-                  : "text-fg-muted hover:bg-hover hover:text-fg",
-              )}
-            >
-              <Layers className="size-4" />
-            </button>
-            <button
-              title="颜色管理（点选图例设为当前使用颜色）"
-              onClick={() => setLegendOpen((v) => !v)}
-              className={cn(
-                "relative flex h-7 w-7 items-center justify-center rounded-md transition-all duration-150 active:scale-95",
-                legendOpen
-                  ? "bg-accent-soft text-accent"
-                  : "text-fg-muted hover:bg-hover hover:text-fg",
-              )}
-            >
-              <Palette className="size-4" />
-              <span
-                title="当前使用颜色"
-                className="absolute right-[3px] top-[3px] size-2 rounded-full ring-1 ring-line"
-                style={{ background: timelineCurrentColorResolved }}
-              />
-            </button>
-              <button
-                title="关联管理"
-                onClick={() => setAssocOpen((v) => !v)}
-                className={cn(
-                  "flex h-7 w-7 items-center justify-center rounded-md transition-all duration-150 active:scale-95",
-                  assocOpen ? "bg-accent-soft text-accent" : "text-fg-muted hover:bg-hover hover:text-fg",
-                )}
-              >
-                <Link2 className="size-4" />
-              </button>
-            </div>
+          <ViewToolbarRow
+            items={pluginRegistry.getContributions("timeline.toolbar")}
+            ctx={{
+              instanceId: active.instanceId,
+              legendVisible,
+              currentColor: timelineCurrentColorResolved,
+              openPanelId: assocOpen ? "assoc" : legendOpen ? "legend" : null,
+              openPanel: (panel) => {
+                if (panel === "legend") setLegendOpen((v) => !v);
+                if (panel === "assoc") setAssocOpen((v) => !v);
+              },
+            }}
+          />
         )}
-        {/* 设定库工具行：撤销/重做在最左，其后为布局切换 / 连线颜色 / 关系文本颜色 / 标签管理 */}
+        {/* 时间轴关联 chips：当前文件关联的设定卡片（横向拖动浏览） */}
           {active?.prototypeId === "core.timeline" && timelineFileId && (
             <div ref={timelineChipsRef} onPointerDown={startTimelineChipsDrag} className="hidden-scrollbar flex h-10 shrink-0 cursor-grab items-center gap-1 overflow-x-auto border-b border-line/60 bg-app px-3 active:cursor-grabbing">
               {timelineAssocCards.length === 0 ? (
@@ -222,64 +170,25 @@ export function MainArea() {
               ))}
             </div>
           )}
+        {/* 设定库工具行：lore.toolbar 贡献点注册渲染（撤销/重做、布局切换、连线/文本颜色、标签管理） */}
         {active?.prototypeId === "core.lore" && (
-          <div className="flex h-10 shrink-0 items-center gap-0.5 border-b border-line/60 bg-app px-2">
-            <button
-              title="撤销（编辑内容 / 返回上一步视图）"
-              onClick={() => requestLoreUndo(active.instanceId)}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-all duration-150 hover:bg-hover hover:text-fg active:scale-95"
-            >
-              <Undo2 className="size-4" />
-            </button>
-            <button
-              title="重做"
-              onClick={() => requestLoreRedo(active.instanceId)}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-all duration-150 hover:bg-hover hover:text-fg active:scale-95"
-            >
-              <Redo2 className="size-4" />
-            </button>
-            <span className="mx-1.5 h-4 w-px bg-line" />
-            <button
-              title={loreLayout === "graph" ? "切换为网格布局" : "切换为连接图"}
-              onClick={() =>
-                setLoreLayout(
-                  active.instanceId,
-                  loreLayout === "graph" ? "grid" : "graph",
-                )
-              }
-              className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-all duration-150 hover:bg-hover hover:text-fg active:scale-95"
-            >
-              {loreLayout === "graph" ? (
-                <Grid3x3 className="size-4" />
-              ) : (
-                <Share2 className="size-4" />
-              )}
-            </button>
-            <ColorSwatchButton
-              value={loreEdgeColorResolved}
-              onChange={(c) => setLoreEdgeColor(active.instanceId, c)}
-              title="连接线颜色（新建连线 / 更改关系名时起效）"
-              label="连线"
-            />
-            <ColorSwatchButton
-              value={loreEdgeLabelColorResolved}
-              onChange={(c) => setLoreEdgeLabelColor(active.instanceId, c)}
-              title="关系文本颜色（新建连线 / 更改关系名时起效）"
-              label="文本"
-            />
-            <button
-              title="标签管理"
-              onClick={() => setTagOpen((v) => !v)}
-              className={cn(
-                "flex h-7 w-7 items-center justify-center rounded-md transition-all duration-150 active:scale-95",
-                tagOpen
-                  ? "bg-accent-soft text-accent"
-                  : "text-fg-muted hover:bg-hover hover:text-fg",
-              )}
-            >
-              <Tags className="size-4" />
-            </button>
-          </div>
+          <ViewToolbarRow
+            items={pluginRegistry.getContributions("lore.toolbar")}
+            ctx={{
+              instanceId: active.instanceId,
+              layout: loreLayout,
+              edgeColor: loreEdgeColorResolved,
+              edgeLabelColor: loreEdgeLabelColorResolved,
+              onSetEdgeColor: (c) => setLoreEdgeColor(active.instanceId, c),
+              onSetEdgeLabelColor: (c) => setLoreEdgeLabelColor(active.instanceId, c),
+              onToggleLayout: () =>
+                setLoreLayout(active.instanceId, loreLayout === "graph" ? "grid" : "graph"),
+              openPanelId: tagOpen ? "tags" : null,
+              openPanel: (panel) => {
+                if (panel === "tags") setTagOpen((v) => !v);
+              },
+            }}
+          />
         )}
       <div key={active?.id ?? "empty"} className="anim-tab relative min-h-0 flex-1 overflow-hidden">
         {active ? (
@@ -309,6 +218,46 @@ export function MainArea() {
   );
 }
 
+/** 视图工具栏行（时间轴/设定库）：由 timeline.toolbar / lore.toolbar 贡献点注册渲染，
+ *  与编辑器工具栏同构 —— 分隔线 / 内联自定义渲染 / 图标按钮（含激活态）。 */
+function ViewToolbarRow({
+  items,
+  ctx,
+}: {
+  items: ViewToolbarItem[];
+  ctx: ViewToolbarContext;
+}) {
+  return (
+    <div className="flex h-10 shrink-0 items-center gap-0.5 border-b border-line/60 bg-app px-2">
+      {items.map((item) => {
+        if (item.divider) {
+          return <span key={item.id} className="mx-1.5 h-4 w-px shrink-0 bg-line" />;
+        }
+        if (item.render) {
+          return (
+            <span key={item.id} className="flex shrink-0 items-center">
+              {item.render(ctx)}
+            </span>
+          );
+        }
+        const active = item.isActive?.(ctx) ?? false;
+        return (
+          <button
+            key={item.id}
+            title={item.title}
+            onClick={() => item.action?.(ctx)}
+            className={cn(
+              "flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-all duration-150 active:scale-95",
+              active ? "bg-accent-soft text-accent" : "text-fg-muted hover:bg-hover hover:text-fg",
+            )}
+          >
+            {item.icon ? <item.icon className="size-4" /> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 /** 主体区域文件标签条（所有插件变体共用）：
  *  隐藏滚动条 + 左键拖动横向滚动（WebView2 下与侧栏同款 pointer 方案）；
  *  拖动超过 4px 判定为滚动，吞掉释放时的 click，避免误切换文件。 */
@@ -532,57 +481,3 @@ function LoreTabs({ instanceId }: { instanceId: string }) {
   );
 }
 
-/** 工具栏色块按钮：色块 + 文字标签，点击弹出通用取色面板（Portal 到 body，避免被工具栏裁剪） */
-function ColorSwatchButton({
-  value,
-  onChange,
-  title,
-  label,
-}: {
-  value: string;
-  onChange: (color: string) => void;
-  title: string;
-  label: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const rect = btnRef.current?.getBoundingClientRect();
-
-  return (
-    <>
-      <button
-        ref={btnRef}
-        title={title}
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "flex h-7 items-center gap-1.5 rounded-md px-1.5 transition-all duration-150 active:scale-95",
-          open ? "bg-accent-soft" : "text-fg-muted hover:bg-hover hover:text-fg",
-        )}
-      >
-        <span className="size-3.5 rounded-[4px] ring-1 ring-line" style={{ background: value }} />
-        <span className="text-[11px] leading-none">{label}</span>
-      </button>
-      {open &&
-        rect &&
-        createPortal(
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-            <div
-              className="fixed z-50 overflow-hidden rounded-xl border border-line/70 bg-app shadow-pop"
-              style={{
-                left: Math.min(rect.left, window.innerWidth - 268),
-                top: rect.bottom + 4,
-              }}
-            >
-              <div className="border-b border-line/50 px-3 py-1.5">
-                <span className="text-[11px] font-medium text-fg">当前{label}颜色</span>
-              </div>
-              <ColorPickerPanel value={value} onChange={onChange} />
-            </div>
-          </>,
-          document.body,
-        )}
-    </>
-  );
-}
