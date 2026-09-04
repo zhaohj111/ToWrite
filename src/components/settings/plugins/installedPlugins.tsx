@@ -1,11 +1,12 @@
 // 插件 > 已安装插件：左栏原型列表（图标/名称/版本/启停开关）+ 右栏插件详情。
 // core.config 为应用核心，仅信息展示不可启停；禁用原型不影响数据（.writeproj 不动），重启用即恢复。
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Package } from "lucide-react";
 import { pluginRegistry } from "@/plugins/registry";
 import { useRegistryVersion } from "@/plugins/hooks";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
 import type { ModuleContract } from "@/types/plugin";
 import { cn } from "@/lib/cn";
 import { SettingToggle } from "@/components/settings/controls";
@@ -16,6 +17,14 @@ export function InstalledPlugins() {
   const modules = pluginRegistry.listModules();
   const [selectedId, setSelectedId] = useState<string | null>(modules[0]?.id ?? null);
   const selected = modules.find((m) => m.id === selectedId) ?? modules[0] ?? null;
+
+  // 外部「查看完整说明」定位：选中对应插件（tab 切换由 PluginDetail 消费同一目标）
+  const pluginGuideTarget = useWorkspaceStore((s) => s.pluginGuideTarget);
+  useEffect(() => {
+    if (pluginGuideTarget && modules.some((m) => m.id === pluginGuideTarget)) {
+      setSelectedId(pluginGuideTarget);
+    }
+  }, [pluginGuideTarget, modules]);
 
   return (
     <div className="flex h-full gap-0">

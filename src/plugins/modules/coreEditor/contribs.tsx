@@ -18,6 +18,7 @@ import {
   Redo2,
   Strikethrough,
   Table2,
+  CircleHelp,
   Undo2,
   Upload,
 } from "lucide-react";
@@ -29,10 +30,27 @@ import {
   importToCurrentChapter,
   insertImage,
 } from "./io";
+import { ToolbarGuideButton } from "@/components/ui/quickGuide";
+import { editorGuide } from "./guideData";
 
 /** 注册编辑器全部贡献点（工具栏/命令/悬停操作/块类型/i18n/主题） */
 export function registerEditorContribs(ctx: PluginContext): void {
     // ---- editor.toolbar 贡献点（v0.7：撤销/重做置左） ----
+    // 操作指引置于最左（与撤销/重做以分隔线隔开）
+    ctx.registerContribution("editor.toolbar", {
+      id: "guide",
+      title: "操作指引（新用户上手）",
+      icon: CircleHelp,
+      action: () => {},
+      render: () => <ToolbarGuideButton data={editorGuide} />,
+    });
+    ctx.registerContribution("editor.toolbar", {
+      id: "divider-guide",
+      title: "",
+      icon: CircleHelp,
+      divider: true,
+      action: () => {},
+    });
     ctx.registerContribution("editor.toolbar", {
       id: "undo",
       title: "撤销",

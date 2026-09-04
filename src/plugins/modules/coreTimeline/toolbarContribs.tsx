@@ -7,9 +7,22 @@ import type { PluginContext, ViewToolbarContext } from "@/types/plugin";
 import { requestTimelineRedo, requestTimelineUndo } from "@/lib/timelineBus";
 import { cn } from "@/lib/cn";
 import { useTimelineUiStore } from "@/stores/timelineUiStore";
+import { ToolbarGuideButton } from "@/components/ui/quickGuide";
+import { timelineGuide } from "./guideData";
 
 /** 注册时间轴视图工具栏全部条目 */
 export function registerTimelineToolbar(ctx: PluginContext): void {
+  // 操作指引置于最左（与撤销/重做以分隔线隔开）
+  ctx.registerContribution("timeline.toolbar", {
+    id: "guide",
+    title: "操作指引（新用户上手）",
+    render: () => <ToolbarGuideButton data={timelineGuide} />,
+  });
+  ctx.registerContribution("timeline.toolbar", {
+    id: "divider-guide",
+    title: "",
+    divider: true,
+  });
   ctx.registerContribution("timeline.toolbar", {
     id: "undo",
     title: "撤销",
@@ -65,4 +78,5 @@ export function registerTimelineToolbar(ctx: PluginContext): void {
       </button>
     ),
   });
+
 }

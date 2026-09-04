@@ -5,6 +5,7 @@ import { Library } from "lucide-react";
 import type { ModuleContract, SettingFieldDef } from "@/types/plugin";
 // 内容解耦：详情 / 更新日志为 .md，设置字段为 .json，与模块代码同目录
 import loreReadme from "./README.md?raw";
+import loreGuide from "./GUIDE.md?raw";
 import loreChangelog from "./CHANGELOG.md?raw";
 import loreSettings from "./settings.json";
 import { LoreSidebar } from "@/components/lore/loreSidebar";
@@ -16,6 +17,7 @@ export const coreLoreModule: ModuleContract = {
   name: "设定库",
   description: "官方重型模块：设定库文件树 + 力导向图/网格卡片编辑区。",
   readme: loreReadme,
+  guideMd: loreGuide,
   changelogMd: loreChangelog,
   kind: "heavy",
   enabled: true,

@@ -205,6 +205,11 @@ export interface ModuleContract {
    * 有值时详情 tab 渲染为富文本，缺省回退展示 description。
    */
   readme?: string;
+  /**
+   * 操作说明：Markdown 源文（Vite `?raw` 导入，如 GUIDE.md）。
+   * 有值时「操作说明」tab 渲染为富文本（详情 tab 展示 readme 宣传内容）。
+   */
+  guideMd?: string;
   /** 版本历史（结构化条目） */
   changelog?: ChangelogEntry[];
   /**

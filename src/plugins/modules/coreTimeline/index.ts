@@ -4,6 +4,7 @@ import { Workflow } from "lucide-react";
 import type { ModuleContract, SettingFieldDef } from "@/types/plugin";
 // 内容解耦：详情 / 更新日志为 .md，设置字段为 .json，与模块代码同目录
 import timelineReadme from "./README.md?raw";
+import timelineGuide from "./GUIDE.md?raw";
 import timelineChangelog from "./CHANGELOG.md?raw";
 import timelineSettings from "./settings.json";
 import { TimelinePane } from "@/components/timeline/timelinePane";
@@ -15,6 +16,7 @@ export const coreTimelineModule: ModuleContract = {
   name: "时间轴",
   description: "官方重型模块：分卷 + 时间轴文件树，水平轴体上可拖动的故事事件标签。",
   readme: timelineReadme,
+  guideMd: timelineGuide,
   changelogMd: timelineChangelog,
   kind: "heavy",
   enabled: true,

@@ -9,6 +9,7 @@
 import { FileText } from "lucide-react";
 import type { ModuleContract, SettingFieldDef } from "@/types/plugin";
 import editorReadme from "./README.md?raw";
+import editorGuide from "./GUIDE.md?raw";
 import editorChangelog from "./CHANGELOG.md?raw";
 import editorSettings from "./settings.json";
 import { EditorPane } from "@/components/editor/editorPane";
@@ -21,6 +22,7 @@ export const coreEditorModule: ModuleContract = {
   name: "编辑器",
   description: "官方重型模块：章节正文编辑，冻结 chapters/ 的 TipTap JSON 格式。",
   readme: editorReadme,
+  guideMd: editorGuide,
   changelogMd: editorChangelog,
   kind: "heavy",
   enabled: true,

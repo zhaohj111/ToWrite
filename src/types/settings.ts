@@ -62,6 +62,7 @@ export const SETTINGS_GROUPS: SettingsGroupDef[] = [
   { id: "plugin", title: "插件", scope: "app" },
   { id: "project", title: "工程", scope: "project" },
   { id: "ai", title: "AI", scope: "app", placeholder: true },
+  { id: "help", title: "帮助", scope: "app" },
   { id: "about", title: "关于", scope: "app" },
 ];
 

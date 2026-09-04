@@ -23,8 +23,13 @@ import { notifyError, notifyInfo, notifySuccess } from "@/lib/notify";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/cn";
+import { EmptyStateGuide } from "@/components/ui/quickGuide";
+import { loreGuide } from "@/plugins/modules/coreLore/guideData";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 export function LorePane() {
+  // 空态引导卡按「工程 + 插件」仅弹一次
+  const projectId = useWorkspaceStore((s) => s.project?.meta.id ?? "");
   const instanceId = useInstanceId();
   const slice = useLoreSlice();
   const fileId = slice.currentFileId;
@@ -366,6 +371,9 @@ export function LorePane() {
             onDeleteCards={(cards) => deleteCards(cards.map((c) => c.id))}
           />
         )}
+
+        {/* 空态引导卡：当前文件无卡片时居中显示（首个卡片出现后自动消失） */}
+        {fileId && (slice.docs[fileId]?.cards.length ?? 0) === 0 && <EmptyStateGuide projectId={projectId} data={loreGuide} />}
 
         {/* 右下角：导出 / 导入（v0.7） */}
         <div data-overlay className="absolute bottom-3 right-3 z-10 flex overflow-hidden rounded-lg border border-line/70 bg-app/90 shadow-sm">

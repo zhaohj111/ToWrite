@@ -1,7 +1,7 @@
 // 设置全屏视图：以 settings.pages 贡献点为目录树数据源，顶栏（返回/标题/全局搜索/分组下拉）
 // + 左子导航 + 右内容区；面包屑来自当前页面 path。工程作用域页面在无工程时灰置不可达。
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { pluginRegistry } from "@/plugins/registry";
 import { useRegistryVersion } from "@/plugins/hooks";
@@ -21,6 +21,16 @@ export function SettingsPage() {
   const [group, setGroup] = useState("app");
   const [pageId, setPageId] = useState<string | null>(null);
   const [focusKey, setFocusKey] = useState<string | null>(null);
+
+  // 外部跳转目标（如空态引导卡「查看完整说明」）：进入设置时直接定位到对应分组/页面
+  const settingsTarget = useWorkspaceStore((s) => s.settingsTarget);
+  useEffect(() => {
+    if (!settingsTarget) return;
+    setGroup(settingsTarget.group);
+    setPageId(settingsTarget.pageId);
+    setFocusKey(null);
+    useWorkspaceStore.setState({ settingsTarget: null });
+  }, [settingsTarget]);
 
   // 插件自有设置页（prototypeId）只在该插件详情的「配置」tab 内展示，不进分类导航与搜索
   const pages = (

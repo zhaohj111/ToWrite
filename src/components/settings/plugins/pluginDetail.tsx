@@ -1,7 +1,7 @@
 // 已安装插件详情：头部（图标/名称/类型/启停/新增实例/管理实例）+ tab（详情/更新日志/配置）。
 // core.config 不可启停；「管理实例」跳转到 插件 > 插件实例 页。
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ListPlus, Package, Settings2 } from "lucide-react";
 import { pluginRegistry } from "@/plugins/registry";
 import { useRegistryVersion } from "@/plugins/hooks";
@@ -19,6 +19,7 @@ import { PluginSettingsPanel } from "@/components/settings/plugins/pluginSetting
 import { PluginShortcutsPanel } from "@/components/settings/plugins/pluginShortcutsPanel";
 import { AddInstanceDialog } from "@/components/settings/plugins/addInstanceDialog";
 import { useSettingsNav } from "@/components/settings/settingsNavContext";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 const KIND_LABEL: Record<ModuleContract["kind"], string> = {
   core: "应用核心",
@@ -26,13 +27,21 @@ const KIND_LABEL: Record<ModuleContract["kind"], string> = {
   light: "轻量插件",
 };
 
-type Tab = "details" | "changelog" | "config";
+type Tab = "details" | "guide" | "changelog" | "config";
 
 export function PluginDetail({ module }: { module: ModuleContract }) {
   useRegistryVersion();
   const { navigate } = useSettingsNav();
   const [tab, setTab] = useState<Tab>("details");
   const [adding, setAdding] = useState(false);
+
+  // 外部「查看完整说明」定位：进入时切到本插件的「操作说明」tab（消费后清除）
+  const pluginGuideTarget = useWorkspaceStore((s) => s.pluginGuideTarget);
+  useEffect(() => {
+    if (pluginGuideTarget !== module.id) return;
+    setTab("guide");
+    useWorkspaceStore.setState({ pluginGuideTarget: null });
+  }, [pluginGuideTarget, module.id]);
   const isCore = module.kind === "core";
   const enabled = useSettingsStore((s) => s.prototypeEnabled[module.id] ?? true);
   const setEnabled = useSettingsStore((s) => s.setPrototypeEnabled);
@@ -83,6 +92,7 @@ export function PluginDetail({ module }: { module: ModuleContract }) {
         {(
           [
             { id: "details", title: "详情" },
+            { id: "guide", title: "操作说明" },
             { id: "changelog", title: "更新日志" },
             { id: "config", title: "配置" },
           ] as { id: Tab; title: string }[]
@@ -108,6 +118,7 @@ export function PluginDetail({ module }: { module: ModuleContract }) {
       {/* ===== tab 内容 ===== */}
       <div className="hidden-scrollbar min-h-0 flex-1 overflow-y-auto pb-6">
         {tab === "details" && <DetailsTab module={module} instanceCount={instanceCount} />}
+        {tab === "guide" && <GuideTab module={module} />}
         {tab === "changelog" && <ChangelogTab module={module} />}
         {tab === "config" && <ConfigTab module={module} />}
       </div>
@@ -143,11 +154,9 @@ function DetailsTab({ module, instanceCount }: { module: ModuleContract; instanc
   const sb = module.views?.sidebars?.map((s) => s.title).join("、") ?? "无";
   return (
     <div className="flex max-w-3xl flex-col gap-3">
-      {module.readme ? (
-        <Markdown source={module.readme} />
-      ) : (
-        <p className="text-[15px] leading-relaxed text-fg-muted">{module.description}</p>
-      )}
+      <p className="text-[15px] leading-relaxed text-fg-muted">{module.description}</p>
+      {/* 详情正文：宣传版 README（开发目的 / 作用简述） */}
+      {module.readme && <Markdown source={module.readme} />}
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
         <dt className="text-fg-muted">活动栏入口</dt>
         <dd className="text-fg">{module.views?.activityBar?.label ?? "无"}</dd>
@@ -164,6 +173,14 @@ function DetailsTab({ module, instanceCount }: { module: ModuleContract; instanc
       </dl>
     </div>
   );
+}
+
+/** 操作说明 tab：插件 GUIDE.md（简明操作指引）全文 */
+function GuideTab({ module }: { module: ModuleContract }) {
+  if (module.guideMd) {
+    return <Markdown source={module.guideMd} />;
+  }
+  return <p className="text-sm text-fg-muted">该插件暂无操作说明。</p>;
 }
 
 function ChangelogTab({ module }: { module: ModuleContract }) {

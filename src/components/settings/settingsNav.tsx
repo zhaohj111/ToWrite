@@ -4,6 +4,7 @@
 
 import {
   AppWindow,
+  BookOpen,
   ChevronRight,
   FolderKanban,
   Info,
@@ -21,6 +22,7 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
   project: FolderKanban,
   ai: Sparkles,
   about: Info,
+  help: BookOpen,
 };
 
 export function SettingsNav({

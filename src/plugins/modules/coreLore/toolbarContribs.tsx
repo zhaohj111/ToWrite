@@ -9,6 +9,8 @@ import type { PluginContext } from "@/types/plugin";
 import { requestLoreRedo, requestLoreUndo } from "@/lib/loreBus";
 import { ColorPickerPanel } from "@/components/ui/colorPicker";
 import { cn } from "@/lib/cn";
+import { ToolbarGuideButton } from "@/components/ui/quickGuide";
+import { loreGuide } from "./guideData";
 
 /** 工具栏色块按钮（自 mainArea 移入）：色块 + 文字标签，点击弹出通用取色面板（Portal 到 body） */
 function ColorSwatch({
@@ -67,6 +69,17 @@ function ColorSwatch({
 
 /** 注册设定库视图工具栏全部条目 */
 export function registerLoreToolbar(ctx: PluginContext): void {
+  // 操作指引置于最左（与撤销/重做以分隔线隔开）
+  ctx.registerContribution("lore.toolbar", {
+    id: "guide",
+    title: "操作指引（新用户上手）",
+    render: () => <ToolbarGuideButton data={loreGuide} />,
+  });
+  ctx.registerContribution("lore.toolbar", {
+    id: "divider-guide",
+    title: "",
+    divider: true,
+  });
   ctx.registerContribution("lore.toolbar", {
     id: "undo",
     title: "撤销（编辑内容 / 返回上一步视图）",
@@ -134,4 +147,5 @@ export function registerLoreToolbar(ctx: PluginContext): void {
     isActive: ({ openPanelId }) => openPanelId === "tags",
     action: ({ openPanel }) => openPanel("tags"),
   });
+
 }

@@ -26,6 +26,7 @@ import { ProjectMetaInfo, ProjectNameField, ProjectNoteField, ProjectStats } fro
 import { AiSettingsPlaceholder } from "@/components/settings/pages/aiSettings";
 import { InstalledPlugins } from "@/components/settings/plugins/installedPlugins";
 import { PluginInstances } from "@/components/settings/plugins/pluginInstances";
+import { FaqPage } from "@/components/settings/pages/faq";
 
 /** 注册全部设置页（应用/工程/插件/AI/关于分组） */
 export function registerConfigPages(ctx: PluginContext): void {
@@ -355,6 +356,18 @@ ctx.registerContribution("settings.pages", {
       items: [],
       // 自定义双栏布局：左栏当前工程实例列表 + 右栏实例配置；scope project，无工程灰置
       component: PluginInstances,
+    });
+
+    // ---- 帮助分组（常见问题；各插件完整说明在 插件 > 已安装插件 > 详情旁「操作说明」tab）----
+    ctx.registerContribution("settings.pages", {
+      id: "help.faq",
+      title: "常见问题",
+      group: "help",
+      path: "帮助 > 常见问题",
+      scope: "app",
+      items: [],
+      // 占位页：高频问题整理中
+      component: FaqPage,
     });
 
     // ---- AI 分组（占位，v0.7 提供；分组整体灰置）----

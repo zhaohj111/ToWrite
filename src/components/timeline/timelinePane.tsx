@@ -46,6 +46,9 @@ import { captureElementToPng } from "@/lib/fileFormats/pngExport";
 import { notifyError, notifyInfo, notifySuccess } from "@/lib/notify";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
+import { EmptyStateGuide } from "@/components/ui/quickGuide";
+import { timelineGuide } from "@/plugins/modules/coreTimeline/guideData";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
 import type { ColorLegendItem, TimelineData, TimelineNodeData } from "@/types/writeproj";
 
 /** 时间单位到世界坐标的像素比例 */
@@ -169,6 +172,8 @@ function TimelineCanvas({
   fileId: string;
   doc: TimelineData;
 }) {
+  // 空态引导卡按「工程 + 插件」仅弹一次
+  const projectId = useWorkspaceStore((s) => s.project?.meta.id ?? "");
   const addNode = useTimelineStore((s) => s.addNode);
   const updateNode = useTimelineStore((s) => s.updateNode);
   const deleteNode = useTimelineStore((s) => s.deleteNode);
@@ -975,6 +980,9 @@ function TimelineCanvas({
             );
           })}
         </div>
+
+        {/* 空态引导卡：当前文件无标签时居中显示（首个标签出现后自动消失） */}
+        {fileId && nodes.length === 0 && <EmptyStateGuide projectId={projectId} data={timelineGuide} />}
 
         {/* 左上角：时间区间 + 刻度 */}
         <div
