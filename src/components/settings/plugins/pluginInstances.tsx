@@ -214,7 +214,7 @@ export function PluginInstances() {
   return (
     <div className="flex h-full gap-0">
       {/* 左栏：实例列表 */}
-      <div className="flex w-72 shrink-0 flex-col">
+      <div className="flex w-72 min-h-0 shrink-0 flex-col">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-[13px] text-fg-muted">当前工程 {instances.length} 个实例</span>
           <button
@@ -224,7 +224,7 @@ export function PluginInstances() {
             <Plus className="size-3.5" /> 新增实例
           </button>
         </div>
-        <div ref={listRef} className="relative">
+        <div ref={listRef} className="relative hidden-scrollbar min-h-0 flex-1 overflow-y-auto pr-1">
           <div className="flex flex-col gap-0.5">
             {instances.map((inst, index) => (
               <InstanceRow

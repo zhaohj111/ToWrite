@@ -82,35 +82,42 @@ export function SettingsPage() {
           onNavigate={navigate}
         />
 
-        <div className="hidden-scrollbar min-h-0 flex-1 overflow-y-auto">
+        <div className="flex min-h-0 flex-1 flex-col">
           {activePage ? (
             <>
               {/* 面包屑 + 页头 */}
-              <div className="border-b border-line/50 px-8 py-4">
+              <div className="shrink-0 border-b border-line/50 px-8 py-4">
                 <div className="text-xs text-fg-muted">{activePage.path}</div>
                 <h2 className="mt-1 font-display text-xl font-semibold text-fg-strong">
                   {activePage.title}
                 </h2>
               </div>
-              {/* 页面内容：自定义布局组件（可经 SettingsNavContext 跳转其他页面），或按 items 自动渲染 */}
-              <div className="px-8 py-6">
-                <SettingsNavContext.Provider value={{ navigate }}>
-                  {activePage.component ? (
+              {/* 自定义布局页（插件管理双栏）：锁定高度、内部自行滚动（左右栏滚动互不关联） */}
+              {activePage.component ? (
+                <div className="min-h-0 flex-1 overflow-hidden px-8 py-6">
+                  <SettingsNavContext.Provider value={{ navigate }}>
                     <activePage.component />
-                  ) : (
-                    <div className="flex max-w-3xl flex-col divide-y divide-line/50">
-                      {activePage.items.map((item) => (
-                        <SettingsItem
-                          key={item.id}
-                          item={item}
-                          focused={focusKey === `${activePage.id}:${item.id}`}
-                          onFocusDone={() => setFocusKey(null)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </SettingsNavContext.Provider>
-              </div>
+                  </SettingsNavContext.Provider>
+                </div>
+              ) : (
+                /* 常规设置页：整页滚动 */
+                <div className="hidden-scrollbar min-h-0 flex-1 overflow-y-auto">
+                  <div className="px-8 py-6">
+                    <SettingsNavContext.Provider value={{ navigate }}>
+                      <div className="flex max-w-3xl flex-col divide-y divide-line/50">
+                        {activePage.items.map((item) => (
+                          <SettingsItem
+                            key={item.id}
+                            item={item}
+                            focused={focusKey === `${activePage.id}:${item.id}`}
+                            onFocusDone={() => setFocusKey(null)}
+                          />
+                        ))}
+                      </div>
+                    </SettingsNavContext.Provider>
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-fg-muted">
