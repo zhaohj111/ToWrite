@@ -285,6 +285,7 @@ function TimelineCanvas({
   const sizesRef = useRef<Record<string, { w: number; h: number }>>({});
   const controlRef = useRef<HTMLDivElement>(null);
 
+  // 图例竖向多列：列数超出面板宽度时，按住图例区域可横向拖动浏览
   const legendScrollRef = useRef<HTMLDivElement>(null);
   const legendDragRef = useRef<{ startClientX: number; startLeft: number; moved: boolean } | null>(null);
   const startLegendDrag = (e: React.PointerEvent) => {
@@ -1048,10 +1049,10 @@ function TimelineCanvas({
           </button>
         </div>
 
-        {/* 右上角：颜色图例（只显示当前文件使用的颜色，过多可左右拖动） */}
+        {/* 右上角：颜色图例（竖向优先，每列 5 行、多余另起一列；列数超出面板宽度可按住横向拖动浏览） */}
         {legendVisible && (
-          <div data-overlay className="absolute right-3 top-3 z-10 max-w-[300px]">
-            <div className="rounded-xl border border-line/70 bg-app/95 p-3 text-xs shadow-pop backdrop-blur-sm">
+          <div data-overlay className="absolute right-3 top-3 z-10 max-w-[420px]">
+            <div className="rounded-xl border border-line/70 bg-app/75 p-3 text-xs shadow-pop backdrop-blur-sm">
               <div className="mb-2 flex items-center gap-2 font-semibold tracking-wide text-fg">
                 <span className="size-1.5 rounded-full bg-accent" />
                 颜色图例
@@ -1059,8 +1060,9 @@ function TimelineCanvas({
               <div
                 ref={legendScrollRef}
                 onPointerDown={startLegendDrag}
-                className="hidden-scrollbar flex cursor-grab items-center gap-1.5 overflow-x-auto active:cursor-grabbing"
+                className="hidden-scrollbar max-h-[230px] cursor-grab overflow-x-auto active:cursor-grabbing"
               >
+                <div className="grid min-w-max grid-flow-col grid-rows-5 gap-x-2.5 gap-y-1">
                 {shownLegend.length === 0 ? (
                   <span className="text-[10px] text-fg-muted/60">暂无使用中的图例</span>
                 ) : shownLegend.map((l) => (
@@ -1083,6 +1085,7 @@ function TimelineCanvas({
                     <span className={cn("truncate", l.hidden && "line-through")}>{l.label}</span>
                   </button>
                 ))}
+                </div>
               </div>
             </div>
           </div>
