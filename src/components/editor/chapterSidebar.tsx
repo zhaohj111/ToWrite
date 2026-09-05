@@ -4,7 +4,7 @@
 //   拖动章节/分卷时只显示目标位置的朱砂插入细线（行间 = 插到该处，卷行高亮 = 拖入该卷，卷内空白 = 追加卷末）。
 // - 删除章节/分卷均弹确认框；分卷可选择「只删分卷（内容移至顶层）」或「连同全部内容删除」。
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -320,8 +320,8 @@ export function ChapterSidebar() {
   // 章节行（分卷内与顶层共用）
   const renderChapter = (c: ChapterMeta) => {
     if (editing?.kind === "chapter" && editing.id === c.id) {
-      return (
-        <Input
+      return rowShell("file", (
+        <input
           autoFocus
           value={editing.title}
           onChange={(e) => setEditing({ ...editing, title: e.target.value })}
@@ -331,9 +331,9 @@ export function ChapterSidebar() {
             if (e.key === "Enter") commitEdit();
             if (e.key === "Escape") setEditing(null);
           }}
-          className="h-7 text-xs"
+          className="min-w-0 flex-1 bg-transparent text-sm outline-none"
         />
-      );
+      ));
     }
     const isBeforeHere =
       dropTarget?.kind === "chapter" &&
@@ -392,29 +392,48 @@ export function ChapterSidebar() {
     );
   };
 
-  // 新建输入行（分卷/章节共用）：失焦提交、Enter 提交、Esc 取消
-  const renderCreateInput = (placeholder: string) => (
-    <Input
-      autoFocus
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commitCreate}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") commitCreate();
-        if (e.key === "Escape") {
-          setCreating(null);
-          setDraft("");
-        }
-      }}
-      placeholder={placeholder}
-      className="h-7 text-xs"
-    />
+  /** 行壳：与普通章节/分卷行同款外观（图标 + 内边距），仅输入光标闪动 */
+  const rowShell = (kind: "file" | "folder", children: ReactNode, outline?: boolean) => (
+    <div
+      className={cn(
+        "flex cursor-default items-center rounded-lg text-sm text-fg",
+        kind === "file" ? "gap-2 px-2.5 py-2" : "gap-1.5 px-1.5 py-1.5",
+        outline && "border border-accent/40 bg-accent-soft/30",
+      )}
+    >
+      {kind === "file" ? (
+        <FileText className="size-3.5 shrink-0 text-fg-muted" />
+      ) : (
+        <Folder className="size-3.5 shrink-0 text-accent/70" />
+      )}
+      {children}
+    </div>
   );
+
+  // 新建输入行（分卷/章节共用）：失焦提交、Enter 提交、Esc 取消
+  const renderCreateInput = (placeholder: string, kind: "file" | "folder") =>
+    rowShell(kind, (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commitCreate}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commitCreate();
+          if (e.key === "Escape") {
+            setCreating(null);
+            setDraft("");
+          }
+        }}
+        placeholder={placeholder}
+        className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-fg-muted/60"
+      />
+    ), true);
 
   // 追加到某组末尾的插入细线（画在该组 ul 底部）
   const groupEndLine = (group: string) =>
     dropTarget?.kind === "chapter" && dropTarget.group === group && dropTarget.beforeId === null ? (
-      <div className="absolute inset-x-1 -bottom-0.5 z-10 h-0.5 rounded-full bg-accent" />
+      <div className="absolute inset-x-1 -bottom-[7px] z-10 h-0.5 rounded-full bg-accent" />
     ) : null;
 
   return (
@@ -477,18 +496,20 @@ export function ChapterSidebar() {
                 <div className="absolute inset-x-1 -top-0.5 z-10 h-0.5 rounded-full bg-accent" />
               )}
               {editing?.kind === "volume" && editing.id === v.id ? (
-                <Input
-                  autoFocus
-                  value={editing.title}
-                  onChange={(e) => setEditing({ ...editing, title: e.target.value })}
-                  onFocus={(e) => e.currentTarget.select()}
-                  onBlur={commitEdit}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitEdit();
-                    if (e.key === "Escape") setEditing(null);
-                  }}
-                  className="h-7 text-xs"
-                />
+                rowShell("folder", (
+                  <input
+                    autoFocus
+                    value={editing.title}
+                    onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onBlur={commitEdit}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitEdit();
+                      if (e.key === "Escape") setEditing(null);
+                    }}
+                    className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                  />
+                ))
               ) : (
                 <div
                   data-drop="volume"
@@ -564,7 +585,7 @@ export function ChapterSidebar() {
                     </li>
                   ))}
                   {creating?.type === "chapter" && creating.volumeId === v.id && (
-                    <li>{renderCreateInput(`输入${fileLabel}名`)}</li>
+                    <li>{renderCreateInput(`输入${fileLabel}名`, "file")}</li>
                   )}
                 </ul>
               )}
@@ -574,7 +595,7 @@ export function ChapterSidebar() {
 
         {/* ===== 新建分卷输入（新卷追加在分卷组末尾，位于顶层章节之前） ===== */}
         {creating?.type === "volume" && (
-          <li className="pt-0.5">{renderCreateInput(`输入${folderLabel}名`)}</li>
+          <li className="pt-0.5">{renderCreateInput(`输入${folderLabel}名`, "folder")}</li>
         )}
 
         {/* ===== 顶层未分卷章节 ===== */}
@@ -591,7 +612,7 @@ export function ChapterSidebar() {
 
         {/* ===== 新建章节输入（顶层） ===== */}
         {creating?.type === "chapter" && !creating.volumeId && (
-          <li className="pt-0.5">{renderCreateInput(`输入${fileLabel}名`)}</li>
+          <li className="pt-0.5">{renderCreateInput(`输入${fileLabel}名`, "file")}</li>
         )}
 
         {/* ===== 搜索无结果 ===== */}

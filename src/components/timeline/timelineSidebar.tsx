@@ -1,7 +1,7 @@
 // 时间轴侧边栏（core.timeline）：分卷（文件夹）+ 时间轴文件树、切换、新建/重命名/删除。
 // 交互与章节侧边栏一致：原位输入命名、指针拖拽（VSCode 插入细线）、删除确认弹窗。
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   CalendarRange,
   ChevronDown,
@@ -331,8 +331,8 @@ export function TimelineSidebar() {
 
   const renderFile = (f: TimelineFileMeta) => {
     if (editing?.kind === "file" && editing.id === f.id) {
-      return (
-        <Input
+      return rowShell("file", (
+        <input
           autoFocus
           value={editing.title}
           onChange={(e) => setEditing({ ...editing, title: e.target.value })}
@@ -342,9 +342,9 @@ export function TimelineSidebar() {
             if (e.key === "Enter") commitEdit();
             if (e.key === "Escape") setEditing(null);
           }}
-          className="h-7 text-xs"
+          className="min-w-0 flex-1 bg-transparent text-sm outline-none"
         />
-      );
+      ));
     }
     const isBeforeHere =
       dropTarget?.kind === "file" &&
@@ -403,27 +403,46 @@ export function TimelineSidebar() {
     );
   };
 
-  const renderCreateInput = (placeholder: string) => (
-    <Input
-      autoFocus
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commitCreate}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") commitCreate();
-        if (e.key === "Escape") {
-          setCreating(null);
-          setDraft("");
-        }
-      }}
-      placeholder={placeholder}
-      className="h-7 text-xs"
-    />
+  /** 行壳：与普通文件/分卷行同款外观（图标 + 内边距），仅输入光标闪动 */
+  const rowShell = (kind: "file" | "folder", children: ReactNode, outline?: boolean) => (
+    <div
+      className={cn(
+        "flex cursor-default items-center rounded-lg text-sm text-fg",
+        kind === "file" ? "gap-2 px-2.5 py-2" : "gap-1.5 px-1.5 py-1.5",
+        outline && "border border-accent/40 bg-accent-soft/30",
+      )}
+    >
+      {kind === "file" ? (
+        <CalendarRange className="size-3.5 shrink-0 text-fg-muted" />
+      ) : (
+        <Folder className="size-3.5 shrink-0 text-accent/70" />
+      )}
+      {children}
+    </div>
   );
+
+  const renderCreateInput = (placeholder: string, kind: "file" | "folder") =>
+    rowShell(kind, (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commitCreate}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commitCreate();
+          if (e.key === "Escape") {
+            setCreating(null);
+            setDraft("");
+          }
+        }}
+        placeholder={placeholder}
+        className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-fg-muted/60"
+      />
+    ), true);
 
   const groupEndLine = (group: string) =>
     dropTarget?.kind === "file" && dropTarget.group === group && dropTarget.beforeId === null ? (
-      <div className="absolute inset-x-1 -bottom-0.5 z-10 h-0.5 rounded-full bg-accent" />
+      <div className="absolute inset-x-1 -bottom-[7px] z-10 h-0.5 rounded-full bg-accent" />
     ) : null;
 
   return (
@@ -486,18 +505,20 @@ export function TimelineSidebar() {
                 <div className="absolute inset-x-1 -top-0.5 z-10 h-0.5 rounded-full bg-accent" />
               )}
               {editing?.kind === "folder" && editing.id === v.id ? (
-                <Input
-                  autoFocus
-                  value={editing.title}
-                  onChange={(e) => setEditing({ ...editing, title: e.target.value })}
-                  onFocus={(e) => e.currentTarget.select()}
-                  onBlur={commitEdit}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitEdit();
-                    if (e.key === "Escape") setEditing(null);
-                  }}
-                  className="h-7 text-xs"
-                />
+                rowShell("folder", (
+                  <input
+                    autoFocus
+                    value={editing.title}
+                    onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onBlur={commitEdit}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitEdit();
+                      if (e.key === "Escape") setEditing(null);
+                    }}
+                    className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                  />
+                ))
               ) : (
                 <div
                   data-drop="folder"
@@ -572,7 +593,7 @@ export function TimelineSidebar() {
                     </li>
                   ))}
                   {creating?.type === "file" && creating.folderId === v.id && (
-                    <li>{renderCreateInput(`输入${fileLabel}名`)}</li>
+                    <li>{renderCreateInput(`输入${fileLabel}名`, "file")}</li>
                   )}
                 </ul>
               )}
@@ -580,7 +601,7 @@ export function TimelineSidebar() {
           );
         })}
 
-        {creating?.type === "folder" && <li className="pt-0.5">{renderCreateInput(`输入${folderLabel}名`)}</li>}
+        {creating?.type === "folder" && <li className="pt-0.5">{renderCreateInput(`输入${folderLabel}名`, "folder")}</li>}
 
         {shownTop.length > 0 && displayFolders.length > 0 && (
           <li className="px-2.5 pb-0.5 pt-2 text-[11px] font-semibold tracking-[0.14em] text-fg-muted">
@@ -594,7 +615,7 @@ export function TimelineSidebar() {
         ))}
 
         {creating?.type === "file" && !creating.folderId && (
-          <li className="pt-0.5">{renderCreateInput(`输入${fileLabel}名`)}</li>
+          <li className="pt-0.5">{renderCreateInput(`输入${fileLabel}名`, "file")}</li>
         )}
 
         {filtering && shownTop.length === 0 && shownByFolder.size === 0 && (
