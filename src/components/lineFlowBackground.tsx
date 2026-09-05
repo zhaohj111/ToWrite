@@ -80,6 +80,8 @@ export function LineFlowBackground() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     let lines: WaveLine[] = [];
     const pointer = { x: -9999, y: -9999, sx: -9999, sy: -9999 };
+    // 最近一次指针移动时刻（静止判定：超过窗口无移动即淡出交互）
+    let lastMoveT = 0;
     let raf = 0;
     let last = performance.now();
     let time = 0;
@@ -143,6 +145,7 @@ export function LineFlowBackground() {
     const onMove = (e: PointerEvent) => {
       pointer.x = e.clientX;
       pointer.y = e.clientY;
+      lastMoveT = performance.now();
     };
     const onLeave = () => {
       pointer.x = -9999;
@@ -164,9 +167,12 @@ export function LineFlowBackground() {
       last = now;
       time += dt;
 
-      // 指针惯性平滑
-      pointer.sx += (pointer.x - pointer.sx) * Math.min(1, dt * 8);
-      pointer.sy += (pointer.y - pointer.sy) * Math.min(1, dt * 8);
+      // 指针惯性平滑：鼠标静止（220ms 无移动）时目标移出屏幕，线条平滑恢复自然流动
+      const pointerActive = now - lastMoveT < 220;
+      const px = pointerActive ? pointer.x : -9999;
+      const py = pointerActive ? pointer.y : -9999;
+      pointer.sx += (px - pointer.sx) * Math.min(1, dt * 8);
+      pointer.sy += (py - pointer.sy) * Math.min(1, dt * 8);
 
       const midY = h * 0.5;
       const sAmp = h * S_AMP;
