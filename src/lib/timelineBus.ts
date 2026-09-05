@@ -38,3 +38,24 @@ export function requestTimelineUndo(instanceId: string): void {
 export function requestTimelineRedo(instanceId: string): void {
   redoHandlers.get(instanceId)?.();
 }
+
+/** 导入/导出处理器（画布由 TimelinePane 注册，工具栏按钮经此调用） */
+export interface TimelineIoHandlers {
+  exportTimelineFile: () => void;
+  exportTimelinePng: () => void;
+  importTimelineFile: () => void;
+}
+const ioHandlers = new Map<string, TimelineIoHandlers>();
+
+export function registerTimelineIo(instanceId: string, handlers: TimelineIoHandlers): () => void {
+  ioHandlers.set(instanceId, handlers);
+  return () => {
+    ioHandlers.delete(instanceId);
+  };
+}
+
+export function requestTimelineIo(instanceId: string, action: keyof TimelineIoHandlers): void {
+  ioHandlers.get(instanceId)?.[action]?.();
+}
+
+/** 画布首次挂载时注册（经 TimelinePane 的导出/导入函数包装） */

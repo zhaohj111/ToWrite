@@ -73,5 +73,11 @@
     "type": "boolean",
     "default": true,
     "instanceOverridable": true
+  },
+  "toolbarGuide": {
+    "label": "工具栏 · 操作指引",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
   }
 }

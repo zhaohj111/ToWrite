@@ -4,6 +4,8 @@
 // 颜色图例跨该实例全部时间轴文件共享（仿设定库实例级共享标签）。
 
 import { create } from "zustand";
+import { resolveSetting } from "@/stores/settingsStore";
+import { TIMELINE_PROTOTYPE } from "@/stores/pluginStore";
 import type {
   ColorLegendItem,
   ProjectData,
@@ -42,6 +44,18 @@ export function normalizeDoc(d: TimelineData | undefined): TimelineData {
 
 function emptyTimelineData(): TimelineData {
   return normalizeDoc(undefined);
+}
+
+/** 新建文件/实例的默认数据：时间区间与刻度取设置项（默认值可配置） */
+function defaultTimelineData(instanceId: string): TimelineData {
+  const doc = normalizeDoc(undefined);
+  const rs = Number(resolveSetting(TIMELINE_PROTOTYPE, instanceId, "defaultRangeStart"));
+  const re = Number(resolveSetting(TIMELINE_PROTOTYPE, instanceId, "defaultRangeEnd"));
+  const ts = Number(resolveSetting(TIMELINE_PROTOTYPE, instanceId, "defaultTickStep"));
+  if (Number.isFinite(rs)) doc.rangeStart = rs;
+  if (Number.isFinite(re)) doc.rangeEnd = re;
+  if (Number.isFinite(ts)) doc.tickStep = ts;
+  return doc;
 }
 
 /** 单个时间轴实例的完整状态 */
@@ -168,7 +182,7 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
         };
       } else {
         // 新工程：默认建一条「时间轴」文件，让主区立刻可点即加标签
-        slices[id] = seedEmptySlice();
+        slices[id] = seedEmptySlice(id);
       }
     }
     set({ slices });
@@ -188,7 +202,7 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
   ensureFile: (instanceId) => {
     const cur = get().slices[instanceId] ?? EMPTY_TIMELINE_SLICE;
     if (cur.files.length > 0) return cur.currentFileId;
-    const next = seedEmptySlice();
+    const next = seedEmptySlice(instanceId);
     set({ slices: { ...get().slices, [instanceId]: next } });
     return next.currentFileId;
   },
@@ -294,7 +308,7 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
         [instanceId]: {
           ...cur,
           files: [...cur.files, file],
-          docs: { ...cur.docs, [id]: emptyTimelineData() },
+          docs: { ...cur.docs, [id]: defaultTimelineData(instanceId) },
           currentFileId: id,
           openTabs: pushTab(cur.openTabs, id),
         },
@@ -674,13 +688,13 @@ function timelineDocToSlice(doc: TimelineDoc): TimelineSlice {
 }
 
 /** 新建实例时的默认切片：一条「时间轴」文件，选中并打开 */
-function seedEmptySlice(): TimelineSlice {
+function seedEmptySlice(instanceId: string): TimelineSlice {
   const id = crypto.randomUUID();
   const file: TimelineFileMeta = { id, title: "时间轴", order: 0 };
   return {
     folders: [],
     files: [file],
-    docs: { [id]: emptyTimelineData() },
+    docs: { [id]: defaultTimelineData(instanceId) },
     colorLegend: DEFAULT_COLOR_LEGEND,
     currentFileId: id,
     openTabs: [id],

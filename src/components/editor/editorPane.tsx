@@ -115,7 +115,7 @@ function MenuRow({
         danger
           ? "text-danger hover:bg-danger/10"
           : active
-            ? "text-accent hover:bg-accent/10"
+            ? "text-accent hover:bg-hover"
             : "text-fg hover:bg-hover",
         disabled && "pointer-events-none opacity-40",
       )}
@@ -524,7 +524,7 @@ export function EditorPane() {
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => setCtxMenu((m) => (m && m.kind === "text" ? { ...m, stage: "picker" } : m))}
-                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-fg transition-colors hover:bg-accent/10 hover:text-accent"
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-fg transition-colors hover:bg-hover hover:text-fg"
                     >
                       <span className="flex-1">更换字体颜色</span>
                       <ChevronRight className="size-3.5 shrink-0 opacity-60" />

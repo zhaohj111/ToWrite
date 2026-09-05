@@ -1,5 +1,6 @@
 // 设置项通用控件：下拉 / 开关 / 数字步进器（设置目录树与搜索结果共用一套外观）。
 
+import { useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import {
   DropdownMenu,
@@ -100,7 +101,7 @@ export function SettingToggle({
   );
 }
 
-/** 数字步进器（min/max 夹取） */
+/** 数字输入（手动编辑 + 步进；min/max 夹取，按步长修整浮点精度） */
 export function SettingNumber({
   value,
   onChange,
@@ -118,26 +119,62 @@ export function SettingNumber({
   disabled?: boolean;
   suffix?: string;
 }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  // 按步长精度修整（0.1 步进的浮点累积 → 0.30000000000000004 修整为 0.3）
+  const stepDecimals = (String(step).split(".")[1] ?? "").length;
   const clamp = (v: number) =>
     Math.min(max ?? Infinity, Math.max(min ?? -Infinity, v));
+  const round = (v: number) => {
+    const n = clamp(v);
+    return stepDecimals === 0 ? Math.round(n) : parseFloat(n.toFixed(stepDecimals));
+  };
+  const commitDraft = () => {
+    if (draft !== null) {
+      const v = parseFloat(draft);
+      if (Number.isFinite(v)) onChange(round(v));
+    }
+    setDraft(null);
+  };
+  const inputCls = "flex h-8 min-w-16 items-center justify-center rounded-lg border border-line bg-panel-3/70 px-2.5 font-mono text-[15px] text-fg tabular-nums focus:border-accent/40 focus:outline-none";
   return (
     <div className={cn("flex items-center gap-1.5", disabled && "opacity-40")}>
       <button
         type="button"
         disabled={disabled}
-        onClick={() => onChange(clamp(value - step))}
+        onClick={() => onChange(round(value - step))}
         className="flex h-8 w-8 items-center justify-center rounded-lg border border-line text-fg-muted transition-colors hover:border-line-strong hover:bg-hover hover:text-fg focus:border-accent/40 disabled:pointer-events-none"
       >
         −
       </button>
-      <div className="flex h-8 min-w-16 items-center justify-center rounded-lg border border-line bg-panel-3/70 px-2.5 font-mono text-[15px] text-fg tabular-nums">
-        {value}
-        {suffix && <span className="ml-0.5 text-xs text-fg-muted">{suffix}</span>}
-      </div>
+      {draft === null ? (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => setDraft(String(value))}
+          title="点击输入"
+          className={cn(inputCls, "hover:border-line-strong")}
+        >
+          {value}
+          {suffix && <span className="ml-0.5 text-xs text-fg-muted">{suffix}</span>}
+        </button>
+      ) : (
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onFocus={(e) => e.currentTarget.select()}
+          onBlur={commitDraft}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commitDraft();
+            if (e.key === "Escape") setDraft(null);
+          }}
+          className={cn(inputCls, "w-20 text-center")}
+        />
+      )}
       <button
         type="button"
         disabled={disabled}
-        onClick={() => onChange(clamp(value + step))}
+        onClick={() => onChange(round(value + step))}
         className="flex h-8 w-8 items-center justify-center rounded-lg border border-line text-fg-muted transition-colors hover:border-line-strong hover:bg-hover hover:text-fg focus:border-accent/40 disabled:pointer-events-none"
       >
         ＋

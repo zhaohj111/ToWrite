@@ -85,6 +85,8 @@ export interface ViewToolbarItem {
   /** 自定义内联渲染（优先于 icon/action），可嵌入色块等交互组件 */
   render?: (ctx: ViewToolbarContext) => ReactNode;
   action?: (ctx: ViewToolbarContext) => void;
+  /** 显示开关分组：对应设置项布尔值（resolveSetting 取 false 时隐藏），同编辑器工具栏 */
+  groupId?: string;
 }
 export interface CommandItem {
   id: string;

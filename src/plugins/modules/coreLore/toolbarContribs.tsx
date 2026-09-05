@@ -7,6 +7,9 @@ import { createPortal } from "react-dom";
 import { Grid3x3, Redo2, Share2, Tags, Undo2 } from "lucide-react";
 import type { PluginContext } from "@/types/plugin";
 import { requestLoreRedo, requestLoreUndo } from "@/lib/loreBus";
+import { requestLoreIo } from "@/lib/loreBus";
+import { Download, FileDown, FileImage, FileUp } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ColorPickerPanel } from "@/components/ui/colorPicker";
 import { cn } from "@/lib/cn";
 import { ToolbarGuideButton } from "@/components/ui/quickGuide";
@@ -73,6 +76,7 @@ export function registerLoreToolbar(ctx: PluginContext): void {
   ctx.registerContribution("lore.toolbar", {
     id: "guide",
     title: "操作指引（新用户上手）",
+    groupId: "toolbarGuide",
     render: () => <ToolbarGuideButton data={loreGuide} />,
   });
   ctx.registerContribution("lore.toolbar", {
@@ -83,12 +87,14 @@ export function registerLoreToolbar(ctx: PluginContext): void {
   ctx.registerContribution("lore.toolbar", {
     id: "undo",
     title: "撤销（编辑内容 / 返回上一步视图）",
+    groupId: "toolbarUndo",
     icon: Undo2,
     action: ({ instanceId }) => requestLoreUndo(instanceId),
   });
   ctx.registerContribution("lore.toolbar", {
     id: "redo",
     title: "重做",
+    groupId: "toolbarRedo",
     icon: Redo2,
     action: ({ instanceId }) => requestLoreRedo(instanceId),
   });
@@ -100,6 +106,7 @@ export function registerLoreToolbar(ctx: PluginContext): void {
   ctx.registerContribution("lore.toolbar", {
     id: "layout",
     title: "切换布局",
+    groupId: "toolbarLayout",
     action: ({ onToggleLayout }) => onToggleLayout?.(),
     // 动态图标：显示当前布局的目标态（网格时显示连接图、连接图时显示网格）
     render: (tctx) => (
@@ -118,6 +125,7 @@ export function registerLoreToolbar(ctx: PluginContext): void {
   });
   ctx.registerContribution("lore.toolbar", {
     id: "edge-color",
+    groupId: "toolbarEdgeColor",
     title: "连接线颜色（新建连线 / 更改关系名时起效）",
     render: (tctx) => (
       <ColorSwatch
@@ -131,6 +139,7 @@ export function registerLoreToolbar(ctx: PluginContext): void {
   ctx.registerContribution("lore.toolbar", {
     id: "edge-label-color",
     title: "关系文本颜色（新建连线 / 更改关系名时起效）",
+    groupId: "toolbarEdgeLabelColor",
     render: (tctx) => (
       <ColorSwatch
         value={tctx.edgeLabelColor ?? "#8a8f98"}
@@ -143,9 +152,42 @@ export function registerLoreToolbar(ctx: PluginContext): void {
   ctx.registerContribution("lore.toolbar", {
     id: "tags",
     title: "标签管理",
+    groupId: "toolbarTags",
     icon: Tags,
     isActive: ({ openPanelId }) => openPanelId === "tags",
     action: ({ openPanel }) => openPanel("tags"),
   });
 
+
+  ctx.registerContribution("lore.toolbar", {
+    id: "io",
+    title: "导入 / 导出",
+    groupId: "toolbarIO",
+    render: (tctx) => (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            title="导入 / 导出"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-all duration-150 hover:bg-hover hover:text-fg active:scale-95"
+          >
+            <Download className="size-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem onSelect={() => requestLoreIo(tctx.instanceId, "exportLoreFile")}>
+            <FileDown className="size-3.5 opacity-70" />
+            <span className="flex-1">导出设定库文件（.lore）</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => requestLoreIo(tctx.instanceId, "exportLorePng")}>
+            <FileImage className="size-3.5 opacity-70" />
+            <span className="flex-1">导出 PNG 图片（连接图）</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => requestLoreIo(tctx.instanceId, "importLoreFile")}>
+            <FileUp className="size-3.5 opacity-70" />
+            <span className="flex-1">导入设定库文件</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ),
+  });
 }

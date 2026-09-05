@@ -10,5 +10,80 @@
     "type": "string",
     "default": "文件夹",
     "instanceOverridable": true
+  },
+  "legendDefault": {
+    "label": "图例默认状态",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "defaultRangeStart": {
+    "label": "默认时间区间起点",
+    "type": "number",
+    "default": 0,
+    "min": -10000,
+    "max": 10000,
+    "step": 0.5,
+    "instanceOverridable": true
+  },
+  "defaultRangeEnd": {
+    "label": "默认时间区间终点",
+    "type": "number",
+    "default": 10,
+    "min": -10000,
+    "max": 10000,
+    "step": 0.5,
+    "instanceOverridable": true
+  },
+  "defaultTickStep": {
+    "label": "默认刻度",
+    "type": "number",
+    "default": 1,
+    "min": 0.1,
+    "max": 100,
+    "step": 0.1,
+    "instanceOverridable": true
+  },
+  "toolbarGuide": {
+    "label": "工具栏 · 操作指引",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarUndo": {
+    "label": "工具栏 · 撤销",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarRedo": {
+    "label": "工具栏 · 重做",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarLegend": {
+    "label": "工具栏 · 图例显示",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarAssoc": {
+    "label": "工具栏 · 关联管理",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarColor": {
+    "label": "工具栏 · 颜色管理",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarIO": {
+    "label": "工具栏 · 导入/导出",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
   }
 }

@@ -38,7 +38,9 @@ class KeybindingRegistry {
   private listeners = new Set<Listener>();
 
   register(defs: KeyBindingDef[]): void {
-    this.defaults.push(...defs);
+    // 按命令去重（dev/HMR 下模块可能重复注册，避免配置页显示重复条目）
+    const existing = new Set(this.defaults.map((d) => d.command));
+    this.defaults.push(...defs.filter((d) => !existing.has(d.command)));
     this.emit();
   }
 
@@ -119,6 +121,30 @@ class KeybindingRegistry {
 
 export const keybindingRegistry = new KeybindingRegistry();
 
+/** 单个组合键串（如 "mod+r"、"f1"）与键盘事件匹配；不跨组合键（应用壳/插件画布共用） */
+export function matchChord(e: KeyboardEvent, chord: string): boolean {
+  const parts = chord.toLowerCase().split("+");
+  const hasMod = parts.includes("mod");
+  const hasShift = parts.includes("shift");
+  const hasAlt = parts.includes("alt");
+  const k = parts[parts.length - 1];
+  const mod = e.ctrlKey || e.metaKey;
+  const shift = e.shiftKey;
+  const alt = e.altKey;
+  if (mod !== hasMod || alt !== hasAlt) return false;
+  // 字符键允许 shift 差异：键位 "+"（shift+=）与 "-"（=）等按主键盘字符匹配
+  if (shift !== hasShift) {
+    if (!(k.length === 1 && !/[a-z0-9]/i.test(k) && e.key === k)) return false;
+  }
+  return e.key.toLowerCase() === k;
+}
+
+/** 命中某命令的任一单组合键（空格分隔的双键序列不在此处理） */
+export function commandMatches(e: KeyboardEvent, def: { keys: string[] } | undefined): boolean {
+  if (!def) return false;
+  return def.keys.some((k) => !k.includes(" ") && matchChord(e, k));
+}
+
 /** React 订阅：注册表版本变化（覆盖/新增键位）时重渲染 */
 export function useKeybindingsVersion(): number {
   return useSyncExternalStore(
@@ -131,7 +157,7 @@ export function useKeybindingsVersion(): number {
 export function registerAppKeybindings(): void {
   keybindingRegistry.register([
     { command: "app.reload", title: "重新加载界面", keys: ["mod+r"], scope: "app" },
-    { command: "app.cycleZoom", title: "循环界面缩放", keys: ["mod+shift+z"], scope: "app" },
+    { command: "app.cycleZoom", title: "循环界面缩放", keys: ["mod+s"], scope: "app" },
     { command: "app.toggleTheme", title: "切换深色 / 浅色", keys: ["mod+shift+t"], scope: "app" },
     { command: "app.openSettings", title: "打开设置", keys: ["mod+,"], scope: "app" },
     { command: "app.backToStart", title: "回到开始页", keys: ["mod+shift+h"], scope: "app" },
@@ -142,14 +168,36 @@ export function registerAppKeybindings(): void {
     实际编辑按键仍由 TipTap 原生 keymap 处理（v0.8 编辑器贡献点落地后再接注册表派发）。 */
 export function registerPluginKeybindings(): void {
   keybindingRegistry.register([
+    { command: "editor.undo", title: "撤销", keys: ["mod+z"], scope: "plugin:core.editor" },
+    { command: "editor.redo", title: "重做", keys: ["mod+shift+z"], scope: "plugin:core.editor" },
     { command: "editor.bold", title: "加粗", keys: ["mod+b"], scope: "plugin:core.editor" },
     { command: "editor.italic", title: "斜体", keys: ["mod+i"], scope: "plugin:core.editor" },
     { command: "editor.strike", title: "删除线", keys: ["mod+shift+x"], scope: "plugin:core.editor" },
-    { command: "editor.undo", title: "撤销", keys: ["mod+z"], scope: "plugin:core.editor" },
-    { command: "editor.redo", title: "重做", keys: ["mod+shift+z"], scope: "plugin:core.editor" },
     { command: "editor.heading1", title: "标题 1", keys: ["mod+alt+1"], scope: "plugin:core.editor" },
     { command: "editor.heading2", title: "标题 2", keys: ["mod+alt+2"], scope: "plugin:core.editor" },
-    { command: "editor.bulletList", title: "无序列表", keys: ["mod+shift+8"], scope: "plugin:core.editor" },
-    { command: "editor.orderedList", title: "有序列表", keys: ["mod+shift+7"], scope: "plugin:core.editor" },
+    { command: "editor.heading3", title: "标题 3", keys: ["mod+alt+3"], scope: "plugin:core.editor" },
+    { command: "editor.bulletList", title: "无序列表", keys: ["mod+alt+4"], scope: "plugin:core.editor" },
+    { command: "editor.orderedList", title: "有序列表", keys: ["mod+alt+5"], scope: "plugin:core.editor" },
+    // 时间轴（plugin 作用域：展示/冲突检测由配置页处理，实际派发在 TimelineCanvas/TimelinePane 内）
+    { command: "timeline.selectAll", title: "全选标签", keys: ["mod+a"], scope: "plugin:core.timeline" },
+    { command: "timeline.toggleLegend", title: "图例显示切换", keys: ["mod+l"], scope: "plugin:core.timeline" },
+    { command: "timeline.fit", title: "概览（适应全部标签）", keys: ["f"], scope: "plugin:core.timeline" },
+    { command: "timeline.zoomIn", title: "放大", keys: ["="], scope: "plugin:core.timeline" },
+    { command: "timeline.zoomOut", title: "缩小", keys: ["-"], scope: "plugin:core.timeline" },
+    { command: "timeline.undo", title: "撤销", keys: ["mod+z"], scope: "plugin:core.timeline" },
+    { command: "timeline.redo", title: "重做", keys: ["mod+shift+z"], scope: "plugin:core.timeline" },
+    // 设定库（连接视图快捷键在 LoreGraphRoot 派发；全局在 LorePane 派发）
+    { command: "lore.selectAll", title: "全选卡片（连接图）", keys: ["mod+a"], scope: "plugin:core.lore" },
+    { command: "lore.zoomIn", title: "放大（连接图）", keys: ["="], scope: "plugin:core.lore" },
+    { command: "lore.zoomOut", title: "缩小（连接图）", keys: ["-"], scope: "plugin:core.lore" },
+    { command: "lore.fit", title: "概览（连接图）", keys: ["f"], scope: "plugin:core.lore" },
+    { command: "lore.undo", title: "撤销", keys: ["mod+z"], scope: "plugin:core.lore" },
+    { command: "lore.redo", title: "重做", keys: ["mod+shift+z"], scope: "plugin:core.lore" },
+    { command: "lore.toggleLayout", title: "视图切换（网格/连接图）", keys: ["mod+shift+v"], scope: "plugin:core.lore" },
   ]);
 }
+
+// 模块级注册（幂等：register 按命令去重）：dev/HMR 重载本模块会重建注册表单例，
+// 在此直接注册保证任何重载后默认键位仍在（配置页、快捷键派发始终可取到）。
+registerAppKeybindings();
+registerPluginKeybindings();

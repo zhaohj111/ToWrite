@@ -42,6 +42,7 @@ import { LoreTimelineAssociationDialog } from "@/components/lore/LoreTimelineAss
 import { useLoreUiStore } from "@/stores/loreUiStore";
 import { useInstanceId, useLoreSlice } from "@/components/editor/editorInstanceContext";
 import { registerLoreCapture, registerLoreFocusHandler } from "@/lib/loreBus";
+import { commandMatches, keybindingRegistry } from "@/lib/keybindings";
 import { captureElementToPng } from "@/lib/fileFormats/pngExport";
 import { ColorPickerPanel } from "@/components/ui/colorPicker";
 import { cn } from "@/lib/cn";
@@ -280,6 +281,37 @@ export function LoreGraph({
     fit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileId]);
+
+  const zoomBy = useCallback((factor: number) => {
+    const el = viewportRef.current;
+    const cx = (el?.clientWidth ?? 0) / 2;
+    const cy = (el?.clientHeight ?? 0) / 2;
+    const v = viewRef.current;
+    const w = (cx - v.x) / v.zoom;
+    const h = (cy - v.y) / v.zoom;
+    const zoom = clamp(v.zoom * factor, MIN_ZOOM, MAX_ZOOM);
+    setView({ x: cx - w * zoom, y: cy - h * zoom, zoom });
+  }, []);
+
+  // —— 键盘快捷键（连接视图；全选 / 放大 / 缩小 / 概览；配置页可改绑）——
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      const defs = keybindingRegistry.list("plugin:core.lore");
+      const hit = (cmd: string) => commandMatches(e, defs.find((d) => d.command === cmd));
+      if (hit("lore.selectAll")) {
+        e.preventDefault();
+        setBoxSel(new Set(cards.map((c) => c.id)));
+        return;
+      }
+      if (hit("lore.zoomIn")) { e.preventDefault(); zoomBy(1.2); return; }
+      if (hit("lore.zoomOut")) { e.preventDefault(); zoomBy(1 / 1.2); return; }
+      if (hit("lore.fit")) { e.preventDefault(); fit(); return; }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fit, zoomBy, cards]);
 
   // —— 截图式 PNG 导出：适应全部 → 截取应用内 DOM → 还原视图（供右上角导出按钮调用） ——
   useEffect(() => {

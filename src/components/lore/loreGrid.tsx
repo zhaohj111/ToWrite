@@ -55,7 +55,7 @@ export function LoreGrid({
         <span className="text-xs text-fg-muted">
           {filtered.length} 个设定{activeTags.length || query ? "（筛选结果）" : ""}
         </span>
-        <Button size="sm" variant="secondary" onClick={onNew}>
+        <Button size="sm" onClick={onNew}>
           <Plus className="size-3.5" /> 新建设定
         </Button>
       </div>

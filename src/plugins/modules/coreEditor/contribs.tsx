@@ -41,6 +41,7 @@ export function registerEditorContribs(ctx: PluginContext): void {
       id: "guide",
       title: "操作指引（新用户上手）",
       icon: CircleHelp,
+      groupId: "toolbarGuide",
       action: () => {},
       render: () => <ToolbarGuideButton data={editorGuide} />,
     });
@@ -195,12 +196,12 @@ export function registerEditorContribs(ctx: PluginContext): void {
       action: () => {},
     });
     ctx.registerContribution("editor.toolbar", {
-      id: "export",
-      title: "导出",
+      id: "io",
+      title: "导入 / 导出",
       icon: Download,
       groupId: "toolbarIO",
       action: ({ editor, instanceId }) => void exportCurrentChapter(instanceId, "txt", editor),
-      // 二级菜单：当前章节 / 全部章节 → 各导出格式
+      // 导入导出合并为一个下拉：导出（当前/全部章节 → 格式）+ 导入（当前/新章节）
       menu: [
         {
           title: "导出当前章节",
@@ -220,17 +221,16 @@ export function registerEditorContribs(ctx: PluginContext): void {
             { title: "PDF", icon: FileDown, run: ({ editor, instanceId }) => void exportAllChapters(instanceId, "pdf-image", editor) },
           ],
         },
-      ],
-    });
-    ctx.registerContribution("editor.toolbar", {
-      id: "import",
-      title: "导入",
-      icon: Upload,
-      groupId: "toolbarIO",
-      action: ({ instanceId }) => void importAsNewChapter(instanceId),
-      menu: [
-        { title: "导入到当前章节…", icon: FileText, run: ({ editor, instanceId }) => void importToCurrentChapter(instanceId, editor) },
-        { title: "导入为新章节…", icon: FileDown, run: ({ instanceId }) => void importAsNewChapter(instanceId) },
+        {
+          title: "导入到当前章节…",
+          icon: FileText,
+          run: ({ editor, instanceId }) => void importToCurrentChapter(instanceId, editor),
+        },
+        {
+          title: "导入为新章节…",
+          icon: FileDown,
+          run: ({ instanceId }) => void importAsNewChapter(instanceId),
+        },
       ],
     });
 

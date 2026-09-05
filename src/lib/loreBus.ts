@@ -80,3 +80,22 @@ export function requestLoreRedo(instanceId: string): void {
   useLoreStore.getState().redo(instanceId);
   useAssociationStore.getState().redo(instanceId);
 }
+
+/** 导入/导出处理器（画布由 LorePane 注册，工具栏按钮经此调用） */
+export interface LoreIoHandlers {
+  exportLoreFile: () => void;
+  exportLorePng: () => void;
+  importLoreFile: () => void;
+}
+const lorIoHandlers = new Map<string, LoreIoHandlers>();
+
+export function registerLoreIo(instanceId: string, handlers: LoreIoHandlers): () => void {
+  lorIoHandlers.set(instanceId, handlers);
+  return () => {
+    lorIoHandlers.delete(instanceId);
+  };
+}
+
+export function requestLoreIo(instanceId: string, action: keyof LoreIoHandlers): void {
+  lorIoHandlers.get(instanceId)?.[action]?.();
+}

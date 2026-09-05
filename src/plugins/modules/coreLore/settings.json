@@ -10,5 +10,63 @@
     "type": "string",
     "default": "文件夹",
     "instanceOverridable": true
+  },
+  "defaultView": {
+    "label": "默认视图",
+    "type": "select",
+    "default": "graph",
+    "options": [
+      { "label": "连接图", "value": "graph" },
+      { "label": "网格", "value": "grid" }
+    ],
+    "instanceOverridable": true
+  },
+  "toolbarGuide": {
+    "label": "工具栏 · 操作指引",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarUndo": {
+    "label": "工具栏 · 撤销",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarRedo": {
+    "label": "工具栏 · 重做",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarLayout": {
+    "label": "工具栏 · 视图切换",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarEdgeColor": {
+    "label": "工具栏 · 连接线颜色",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarEdgeLabelColor": {
+    "label": "工具栏 · 关系文本颜色",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarTags": {
+    "label": "工具栏 · 标签管理",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarIO": {
+    "label": "工具栏 · 导入/导出",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
   }
 }

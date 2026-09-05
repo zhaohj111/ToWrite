@@ -4,7 +4,7 @@
 // 撤销/重做/布局切换由宿主工具栏驱动（见 mainArea）。
 
 import { useEffect, useRef, useState } from "react";
-import { Download, FileImage, FileUp, Search, Upload, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { useLoreStore } from "@/stores/loreStore";
 import { useAssociationStore } from "@/stores/associationStore";
@@ -19,8 +19,12 @@ import { readTextFile, writeBinaryFile, writeTextFile } from "@/lib/tauri";
 import { serializeLore, parseLore } from "@/lib/fileFormats/loreFormat";
 import { getAllTimelineFiles } from "@/lib/associationUtils";
 import { captureLoreGraph } from "@/lib/loreBus";
+import { registerLoreIo } from "@/lib/loreBus";
+import { requestLoreRedo, requestLoreUndo } from "@/lib/loreBus";
+import { commandMatches, keybindingRegistry } from "@/lib/keybindings";
+import { resolveSetting } from "@/stores/settingsStore";
+import { LORE_PROTOTYPE } from "@/stores/loreStore";
 import { notifyError, notifyInfo, notifySuccess } from "@/lib/notify";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/cn";
 import { EmptyStateGuide } from "@/components/ui/quickGuide";
@@ -267,6 +271,43 @@ export function LorePane() {
     }
   };
 
+  // —— 导入 / 导出（工具栏经 bus 调用）——
+  useEffect(() =>
+    registerLoreIo(instanceId, {
+      exportLoreFile: () => void exportLore("lore"),
+      exportLorePng: () => void exportLore("png"),
+      importLoreFile: () => void importLore(),
+    }),
+    [instanceId, exportLore, importLore],
+  );
+
+  // —— 全局快捷键（撤销 / 重做 / 视图切换；配置页可改绑）——
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      const defs = keybindingRegistry.list("plugin:core.lore");
+      const hit = (cmd: string) => commandMatches(e, defs.find((d) => d.command === cmd));
+      if (hit("lore.undo")) { e.preventDefault(); requestLoreUndo(instanceId); return; }
+      if (hit("lore.redo")) { e.preventDefault(); requestLoreRedo(instanceId); return; }
+      if (hit("lore.toggleLayout")) {
+        e.preventDefault();
+        const st = useLoreUiStore.getState();
+        const cur = st.slices[instanceId]?.view.layout ?? "graph";
+        st.setLayout(instanceId, cur === "graph" ? "grid" : "graph");
+        return;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [instanceId]);
+
+  // —— 默认视图（设置项）：进入视图时应用 ——
+  useEffect(() => {
+    const d = resolveSetting(LORE_PROTOTYPE, instanceId, "defaultView");
+    useLoreUiStore.getState().setLayout(instanceId, d === "grid" ? "grid" : "graph");
+  }, [instanceId]);
+
   return (
     <div className="flex h-full flex-col">
       {/* 面板头部：搜索 */}
@@ -375,42 +416,6 @@ export function LorePane() {
         {/* 空态引导卡：当前文件无卡片时居中显示（首个卡片出现后自动消失） */}
         {fileId && (slice.docs[fileId]?.cards.length ?? 0) === 0 && <EmptyStateGuide projectId={projectId} data={loreGuide} />}
 
-        {/* 右下角：导出 / 导入（v0.7） */}
-        <div data-overlay className="absolute bottom-3 right-3 z-10 flex overflow-hidden rounded-lg border border-line/70 bg-app/90 shadow-sm">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                title="导出设定库"
-                disabled={ioBusy}
-                onPointerDown={(e) => e.stopPropagation()}
-                className="flex h-7 items-center gap-1 px-2 text-xs text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
-              >
-                <Download className="size-3.5" />
-                导出
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => void exportLore("lore")}>
-                <FileUp className="size-3.5 opacity-70" />
-                <span className="flex-1">导出设定库文件（.lore）</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void exportLore("png")}>
-                <FileImage className="size-3.5 opacity-70" />
-                <span className="flex-1">导出 PNG 图片（连接图）</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <button
-            title="导入设定库文件"
-            disabled={ioBusy}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => void importLore()}
-            className="flex h-7 items-center gap-1 border-l border-line/60 px-2 text-xs text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
-          >
-            <Upload className="size-3.5" />
-            导入
-          </button>
-        </div>
       </div>
 
       {/* 卡片编辑器 */}

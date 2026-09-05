@@ -18,33 +18,30 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  CalendarRange,
-  Download,
-  FileImage,
-  FileUp,
-  Maximize2,
+  CalendarRange,Maximize2,
   Minus,
   Paintbrush,
   Palette,
   Pencil,
   Plus,
   Search,
-  Trash2,
-  Upload,
-  X,
+  Trash2,X,
 } from "lucide-react";
 import { normalizeDoc, useTimelineStore, DEFAULT_COLOR_LEGEND } from "@/stores/timelineStore";
 import { useTimelineUiStore } from "@/stores/timelineUiStore";
 import { useAssociationStore } from "@/stores/associationStore";
 import { useInstanceId, useTimelineDoc, useTimelineSlice } from "@/components/editor/editorInstanceContext";
 import { registerFitHandler, registerUndoHandler, registerRedoHandler } from "@/lib/timelineBus";
+import { registerTimelineIo } from "@/lib/timelineBus";
+import { commandMatches, keybindingRegistry } from "@/lib/keybindings";
+import { resolveSetting } from "@/stores/settingsStore";
+import { TIMELINE_PROTOTYPE } from "@/stores/pluginStore";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile, writeBinaryFile } from "@/lib/tauri";
 import { serializeTimeline, parseTimeline } from "@/lib/fileFormats/timelineFormat";
 import { getAllLoreCards } from "@/lib/associationUtils";
 import { captureElementToPng } from "@/lib/fileFormats/pngExport";
 import { notifyError, notifyInfo, notifySuccess } from "@/lib/notify";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
 import { EmptyStateGuide } from "@/components/ui/quickGuide";
 import { timelineGuide } from "@/plugins/modules/coreTimeline/guideData";
@@ -450,6 +447,27 @@ function TimelineCanvas({
   }, [fit, fileId]);
   useEffect(() => registerFitHandler(instanceId, fit), [instanceId, fit]);
 
+  // 快捷键用节点镜像（避免 keydown 效果因 doc.nodes 重建频繁重挂）
+  const nodesRef = useRef(doc.nodes);
+  nodesRef.current = doc.nodes;
+
+  // 导入 / 导出（工具栏经 bus 调用）
+  useEffect(() =>
+    registerTimelineIo(instanceId, {
+      exportTimelineFile: () => void exportTimeline("timeline"),
+      exportTimelinePng: () => void exportTimeline("png"),
+      importTimelineFile: () => void importTimeline(),
+    }),
+    [instanceId, exportTimeline, importTimeline],
+  );
+
+  // 图例默认状态（设置项）：进入视图时应用
+  useEffect(() => {
+    useTimelineUiStore.getState().setLegendVisible(
+      resolveSetting(TIMELINE_PROTOTYPE, instanceId, "legendDefault") !== false,
+    );
+  }, [instanceId]);
+
   // —— 撤销 / 重做（实例级快照）——
     const undo = useCallback(() => {
       useTimelineStore.getState().undo(instanceId);
@@ -462,24 +480,32 @@ function TimelineCanvas({
   useEffect(() => registerUndoHandler(instanceId, undo), [instanceId, undo]);
   useEffect(() => registerRedoHandler(instanceId, redo), [instanceId, redo]);
 
-  // —— 键盘快捷键：Ctrl/⌘+Z 撤销、Ctrl/⌘+Shift+Z / Ctrl+Y 重做（输入框内由输入框自身处理）——
+  // —— 键盘快捷键（配置页可改绑；输入框内由输入框自身处理）——
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const mod = e.ctrlKey || e.metaKey;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      if (mod && e.key.toLowerCase() === "z") {
+      const defs = keybindingRegistry.list("plugin:core.timeline");
+      const hit = (cmd: string) => commandMatches(e, defs.find((d) => d.command === cmd));
+      if (hit("timeline.undo")) { e.preventDefault(); undo(); return; }
+      if (hit("timeline.redo")) { e.preventDefault(); redo(); return; }
+      if (hit("timeline.selectAll")) {
         e.preventDefault();
-        if (e.shiftKey) redo();
-        else undo();
-      } else if (mod && e.key.toLowerCase() === "y") {
-        e.preventDefault();
-        redo();
+        setBoxSel(new Set(nodesRef.current.map((n) => n.id)));
+        return;
       }
+      if (hit("timeline.toggleLegend")) {
+        e.preventDefault();
+        useTimelineUiStore.getState().setLegendVisible(!useTimelineUiStore.getState().legendVisible);
+        return;
+      }
+      if (hit("timeline.fit")) { e.preventDefault(); fit(); return; }
+      if (hit("timeline.zoomIn")) { e.preventDefault(); zoomBy(1.2); return; }
+      if (hit("timeline.zoomOut")) { e.preventDefault(); zoomBy(1 / 1.2); return; }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo]);
+  }, [undo, redo, fit]);
 
   // —— 选中/编辑切换：清理误建的空白标签 ——
   const cleanupSelected = () => {
@@ -1062,7 +1088,11 @@ function TimelineCanvas({
                 onPointerDown={startLegendDrag}
                 className="hidden-scrollbar max-h-[230px] cursor-grab overflow-x-auto active:cursor-grabbing"
               >
-                <div className="grid min-w-max grid-flow-col grid-rows-5 gap-x-2.5 gap-y-1">
+                <div
+                  className="grid min-w-max grid-flow-col gap-x-2.5 gap-y-1"
+                  // 行数自适应：不足 5 行按实际条目高度渲染，不空占 5 行
+                  style={{ gridTemplateRows: `repeat(${Math.max(1, Math.min(shownLegend.length, 5))}, auto)` }}
+                >
                 {shownLegend.length === 0 ? (
                   <span className="text-[10px] text-fg-muted/60">暂无使用中的图例</span>
                 ) : shownLegend.map((l) => (
@@ -1090,42 +1120,6 @@ function TimelineCanvas({
             </div>
           </div>
         )}
-        {/* 右下角：导出 / 导入（v0.7） */}
-        <div data-overlay className="absolute bottom-3 right-3 z-10 flex overflow-hidden rounded-lg border border-line/70 bg-app/90 shadow-sm">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                title="导出时间轴"
-                disabled={ioBusy}
-                onPointerDown={(e) => e.stopPropagation()}
-                className="flex h-7 items-center gap-1 px-2 text-xs text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
-              >
-                <Download className="size-3.5" />
-                导出
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => void exportTimeline("timeline")}>
-                <FileUp className="size-3.5 opacity-70" />
-                <span className="flex-1">导出时间轴文件（.timeline）</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void exportTimeline("png")}>
-                <FileImage className="size-3.5 opacity-70" />
-                <span className="flex-1">导出 PNG 图片</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <button
-            title="导入时间轴文件"
-            disabled={ioBusy}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => void importTimeline()}
-            className="flex h-7 items-center gap-1 border-l border-line/60 px-2 text-xs text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
-          >
-            <Upload className="size-3.5" />
-            导入
-          </button>
-        </div>
       </div>
 
       {/* 框选矩形（屏幕坐标，Portal 到 body，规避 CSS zoom 偏移） */}

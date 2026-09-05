@@ -16,6 +16,7 @@ import { getSetting } from "@/lib/settings";
 import {
   isRecordingActive,
   keybindingRegistry,
+  matchChord,
   registerAppKeybindings,
   registerPluginKeybindings,
 } from "@/lib/keybindings";
@@ -183,19 +184,6 @@ function dispatchAppCommand(command: string) {
   }
 }
 
-/** 单个组合键串（如 "mod+r"、"f1"）与键盘事件匹配；不跨组合键 */
-function matchChord(e: KeyboardEvent, chord: string): boolean {
-  const parts = chord.toLowerCase().split("+");
-  const hasMod = parts.includes("mod");
-  const hasShift = parts.includes("shift");
-  const hasAlt = parts.includes("alt");
-  const k = parts[parts.length - 1];
-  const mod = e.ctrlKey || e.metaKey;
-  const shift = e.shiftKey;
-  const alt = e.altKey;
-  if (mod !== hasMod || shift !== hasShift || alt !== hasAlt) return false;
-  return e.key.toLowerCase() === k;
-}
 
 /** 双键序列的进行中状态（app 作用域；超时或按键不匹配自动作废） */
 let seqPending: { command: string; chords: string[]; idx: number; timer: number } | null = null;

@@ -18,6 +18,9 @@ import { useEditorStore, EMPTY_SLICE } from "@/stores/editorStore";
 import { useTimelineStore, EMPTY_TIMELINE_SLICE } from "@/stores/timelineStore";
 import { useAssociationStore } from "@/stores/associationStore";
 import { useTimelineUiStore } from "@/stores/timelineUiStore";
+import { resolveSetting } from "@/stores/settingsStore";
+import { TIMELINE_PROTOTYPE } from "@/stores/pluginStore";
+import { LORE_PROTOTYPE } from "@/stores/loreStore";
 import { useLoreStore, EMPTY_LORE_SLICE } from "@/stores/loreStore";
 import { useLoreUiStore } from "@/stores/loreUiStore";
 import { EditorInstanceProvider } from "@/components/editor/editorInstanceContext";
@@ -140,6 +143,7 @@ export function MainArea() {
         {active?.prototypeId === "core.timeline" && (
           <ViewToolbarRow
             items={pluginRegistry.getContributions("timeline.toolbar")}
+            protoId={TIMELINE_PROTOTYPE}
             ctx={{
               instanceId: active.instanceId,
               legendVisible,
@@ -189,6 +193,7 @@ export function MainArea() {
         {active?.prototypeId === "core.lore" && (
           <ViewToolbarRow
             items={pluginRegistry.getContributions("lore.toolbar")}
+            protoId={LORE_PROTOTYPE}
             ctx={{
               instanceId: active.instanceId,
               layout: loreLayout,
@@ -233,13 +238,28 @@ export function MainArea() {
 function ViewToolbarRow({
   items,
   ctx,
+  protoId,
 }: {
   items: ViewToolbarItem[];
   ctx: ViewToolbarContext;
+  protoId: string;
 }) {
+  // 按设置项的显示开关过滤（groupId 布尔值 false 隐藏），并清理孤立分隔线
+  const visible = (() => {
+    const shown = items.filter(
+      (i) => !i.groupId || resolveSetting(protoId, ctx.instanceId, i.groupId) !== false,
+    );
+    return shown.filter((item, idx, arr) => {
+      if (!item.divider) return true;
+      const prevIsDivider = !!arr[idx - 1]?.divider;
+      const nextIsDivider = !!arr[idx + 1]?.divider;
+      const atEdge = idx === 0 || idx === arr.length - 1;
+      return !prevIsDivider && !nextIsDivider && !atEdge;
+    });
+  })();
   return (
     <div className="flex h-10 shrink-0 items-center gap-0.5 border-b border-line/60 bg-app px-2">
-      {items.map((item) => {
+      {visible.map((item) => {
         if (item.divider) {
           return <span key={item.id} className="mx-1.5 h-4 w-px shrink-0 bg-line" />;
         }
