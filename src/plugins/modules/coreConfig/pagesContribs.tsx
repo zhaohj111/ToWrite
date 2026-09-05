@@ -48,6 +48,15 @@ export function registerConfigPages(ctx: PluginContext): void {
           render: () => <StartupBehavior />,
         },
         {
+          id: "language",
+          title: "界面语言",
+          description: "更多语言将在后续版本提供。",
+          keywords: ["语言", "language", "简体中文", "国际化"],
+          scope: "app",
+          path: "应用 > 通用与启动",
+          render: () => <LanguageSetting />,
+        },
+        {
           id: "recent",
           title: "最近打开的工程",
           description: "从最近列表移除条目（不影响工程文件本身）。",
@@ -56,15 +65,6 @@ export function registerConfigPages(ctx: PluginContext): void {
           path: "应用 > 通用与启动",
           layout: "stack",
           render: () => <RecentProjects />,
-        },
-        {
-          id: "language",
-          title: "界面语言",
-          description: "更多语言将在后续版本提供。",
-          keywords: ["语言", "language", "简体中文", "国际化"],
-          scope: "app",
-          path: "应用 > 通用与启动",
-          render: () => <LanguageSetting />,
         },
       ],
     });
