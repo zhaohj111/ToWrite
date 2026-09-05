@@ -241,14 +241,7 @@ export function LoreGraph({
     return () => ro.disconnect();
   }, []);
 
-  // —— 测量卡片尺寸 ——
-  useLayoutEffect(() => {
-    const next: Record<string, { w: number; h: number }> = {};
-    for (const [id, el] of Object.entries(nodeElsRef.current)) {
-      if (el) next[id] = { w: el.offsetWidth, h: el.offsetHeight };
-    }
-    sizesRef.current = next;
-  }, [cards]);
+
 
   // —— 自适应缩放：让全部卡片 + 边恰好进入视口（纯计算，供「适应全部」与截图导出共用） ——
   const computeFitView = useCallback(() => {
@@ -885,9 +878,6 @@ export function LoreGraph({
           {/* 节点卡片 */}
           {cards.map((c) => {
             const p = posFor(c);
-            const size = sizesRef.current[c.id];
-            const w = size?.w ?? NODE_W;
-            const h = size?.h ?? NODE_H;
             const isSel = boxSel.has(c.id) || c.id === view?.selectedCardId;
             return (
               <div
@@ -896,7 +886,8 @@ export function LoreGraph({
                 ref={(el) => {
                   nodeElsRef.current[c.id] = el;
                 }}
-                style={{ left: p.x - w / 2, top: p.y - h / 2 }}
+                // 以锚点为中心（translate -50%/-50%）：不依赖尺寸测量，新建/内容变化后始终精确居中
+                style={{ left: p.x, top: p.y, transform: "translate(-50%, -50%)" }}
                 className="absolute"
               >
                 <LoreCardContent
@@ -1167,8 +1158,10 @@ function LoreCardContent({
     <div
       className={cn(
         // 注意：不加 backdrop-blur / transition-all —— 拖拽时每帧重算毛玻璃会严重拖慢节点跟手
-        "group relative w-[190px] rounded-xl border bg-app/95 p-2.5 shadow-sm",
+        "group relative flex w-[190px] flex-col rounded-xl border bg-app/95 p-2.5 shadow-sm",
         selected ? "border-accent ring-2 ring-accent/40" : "border-line",
+        // 空设定：自然高度（无标签无需更高卡片），单行内容垂直居中
+        cardTags.length === 0 && !card.note && "justify-center",
       )}
       onDoubleClick={(e) => {
         e.stopPropagation();
@@ -1181,19 +1174,21 @@ function LoreCardContent({
           {card.title || "未命名设定"}
         </span>
       </div>
-      {/* 单行完整显示标签内容；超出卡片宽度即隐藏（不显示数量） */}
-      <div className="mt-1 flex min-w-0 items-center gap-1 overflow-hidden">
-        {cardTags.map((t) => (
-          <span
-            key={t.id}
-            title={t.name}
-            className="shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px]"
-            style={{ background: t.color + "26", color: t.color }}
-          >
-            {t.name}
-          </span>
-        ))}
-      </div>
+      {/* 标签行：仅在有标签时渲染（空设定不再产生 4px 幽灵间距，保证标题精确垂直居中） */}
+      {cardTags.length > 0 && (
+        <div className="mt-1 flex min-w-0 items-center gap-1 overflow-hidden">
+          {cardTags.map((t) => (
+            <span
+              key={t.id}
+              title={t.name}
+              className="shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px]"
+              style={{ background: t.color + "26", color: t.color }}
+            >
+              {t.name}
+            </span>
+          ))}
+        </div>
+      )}
       {card.note && <div className="mt-1 truncate text-[10px] text-fg-muted">{card.note}</div>}
     </div>
   );
