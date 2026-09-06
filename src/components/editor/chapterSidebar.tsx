@@ -33,13 +33,13 @@ import { useEditorStore } from "@/stores/editorStore";
 import { useEditorInstance, useEditorSlice, useSidebarLabel } from "@/components/editor/editorInstanceContext";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { cn } from "@/lib/cn";
-import type { ChapterMeta } from "@/types/writeproj";
+import type { ChapterMeta, VolumeMeta } from "@/types/writeproj";
 
-type Creating = { type: "chapter"; volumeId?: string } | { type: "volume" } | null;
+type Creating = { type: "chapter"; volumeId?: string } | { type: "volume"; volumeId?: string } | null;
 type Editing = { kind: "chapter" | "volume"; id: string; title: string } | null;
 type Confirm = { kind: "chapter"; id: string; title: string } | { kind: "volume"; id: string; title: string } | null;
 /** group：分卷 id 或 ""（顶层）；beforeId 为 null 表示追加到该组末尾 */
-type DropTarget = { kind: "chapter"; group: string; beforeId: string | null } | { kind: "volume"; beforeId: string | null } | null;
+type DropTarget = { kind: "chapter"; group: string; beforeId: string | null } | { kind: "volume"; group: string; beforeId: string | null } | null;
 
 export function ChapterSidebar() {
   const instanceId = useEditorInstance();
@@ -94,22 +94,29 @@ export function ChapterSidebar() {
   const filtering = q.length > 0;
   const { byVolume: shownByVolume, top: shownTop } = useMemo(() => {
     if (!filtering) return { byVolume, top };
-    const fbv = new Map<string, ChapterMeta[]>();
+    // 过滤时扁平显示所有命中章节（忽略分卷层级）
     const ftop: ChapterMeta[] = [];
     for (const c of chapters) {
-      if (!c.title.toLowerCase().includes(q)) continue;
-      const inVolume = !!c.volumeId && volumes.some((v) => v.id === c.volumeId);
-      if (inVolume) {
-        const arr = fbv.get(c.volumeId!) ?? [];
-        arr.push(c);
-        fbv.set(c.volumeId!, arr);
-      } else {
-        ftop.push(c);
-      }
+      if (c.title.toLowerCase().includes(q)) ftop.push(c);
     }
-    return { byVolume: fbv, top: ftop };
+    ftop.sort((a, b) => a.order - b.order);
+    return { byVolume, top: ftop };
   }, [chapters, volumes, byVolume, top, filtering, q]);
   const displayVolumes = filtering ? volumes.filter((v) => shownByVolume.has(v.id)) : volumes;
+
+  // 分卷按上级分组（parentId ?? "" = 顶层），支持多级嵌套
+  const volumesByParent = useMemo(() => {
+    const map = new Map<string, VolumeMeta[]>();
+    for (const v of volumes) {
+      const g = v.parentId ?? "";
+      const arr = map.get(g) ?? [];
+      arr.push(v);
+      map.set(g, arr);
+    }
+    for (const arr of map.values()) arr.sort((a, b) => a.order - b.order);
+    return map;
+  }, [volumes]);
+  const topVolumes = volumesByParent.get("") ?? [];
 
   // —— 指针拖拽（不依赖 HTML5 DnD，WebView2 下稳定）——
   const pendingRef = useRef<{ kind: "chapter" | "volume"; id: string; x: number; y: number } | null>(null);
@@ -168,14 +175,16 @@ export function ChapterSidebar() {
         const id = target.dataset.dropId ?? "";
         if (d.kind === "chapter") return { kind: "chapter", group: id, beforeId: null }; // 追加到该分卷
         const rect = target.getBoundingClientRect();
-        if (y < rect.top + rect.height / 2) return { kind: "volume", beforeId: id };
-        const idx = vs.findIndex((v) => v.id === id);
-        return { kind: "volume", beforeId: idx >= 0 ? (vs[idx + 1]?.id ?? null) : null };
+        const parentGroup = target.dataset.dropGroup ?? "";
+        // 上半 = 该分卷同级前插入（组 = 其父级）；下半 = 拖入该分卷（追加为其最后子分卷）
+        if (y < rect.top + rect.height / 2) return { kind: "volume", group: parentGroup, beforeId: id };
+        return { kind: "volume", group: id, beforeId: null };
       }
 
       if (drop === "group-end") {
-        if (d.kind !== "chapter") return null;
         const group = target.dataset.dropGroup ?? "";
+        if (d.kind === "volume") return { kind: "volume", group, beforeId: null }; // 追加为组末兄弟分卷
+        if (d.kind !== "chapter") return null;
         // 光标不在任何行上（行间距/组末空白）：按 y 相对该组各行的上下半定边界——
         // 光标在某行上半 → 插到该行前；下半 → 插到其后；低于最后一行 → 追加组末。
         // 指示线落在光标附近，而不是跳到列表最底部（长列表下会被卷出视口、像被遮挡）。
@@ -219,7 +228,9 @@ export function ChapterSidebar() {
         const t = dropRef.current;
         if (t) {
           if (d.kind === "volume") {
-            if (t.kind === "volume" && t.beforeId !== d.id) moveVolume(instanceId, d.id, t.beforeId);
+            if (t.kind === "volume" && t.beforeId !== d.id) {
+              moveVolume(instanceId, d.id, t.group === "" ? undefined : t.group, t.beforeId);
+            }
           } else if (t.kind === "chapter" && t.beforeId !== d.id) {
             moveChapter(instanceId, d.id, {
               volumeId: t.group === "" ? undefined : t.group,
@@ -295,7 +306,7 @@ export function ChapterSidebar() {
     if (!creating) return;
     const title = draft.trim();
     if (title) {
-      if (creating.type === "volume") addVolume(instanceId, title);
+      if (creating.type === "volume") addVolume(instanceId, title, creating.volumeId);
       else addChapter(instanceId, title, creating.volumeId);
     }
     setCreating(null);
@@ -431,8 +442,133 @@ export function ChapterSidebar() {
     ), true);
 
   // 追加到某组末尾的插入细线（画在该组 ul 底部）
-  const groupEndLine = (group: string) =>
-    dropTarget?.kind === "chapter" && dropTarget.group === group && dropTarget.beforeId === null ? (
+  /** 递归渲染分卷节点：子分卷 + 章节 + 两级新建输入（多级嵌套） */
+  const renderVolumeNode = (v: VolumeMeta) => {
+    const expanded = filtering || !isCollapsed(v.id);
+    const children = shownByVolume.get(v.id) ?? [];
+    const subVolumes = volumesByParent.get(v.id) ?? [];
+    return (
+      <li key={v.id} className="relative">
+        {dropTarget?.kind === "volume" &&
+          dropTarget.group === (v.parentId ?? "") &&
+          dropTarget.beforeId === v.id && (
+          <div className="absolute inset-x-1 -top-0.5 z-10 h-0.5 rounded-full bg-accent" />
+        )}
+        {editing?.kind === "volume" && editing.id === v.id ? (
+          rowShell("folder", (
+            <input
+              autoFocus
+              value={editing.title}
+              onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+              onFocus={(e) => e.currentTarget.select()}
+              onBlur={commitEdit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitEdit();
+                if (e.key === "Escape") setEditing(null);
+              }}
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+            />
+          ))
+        ) : (
+          <div
+            data-drop="volume"
+            data-drop-id={v.id}
+            data-drop-group={v.parentId ?? ""}
+            onPointerDown={(e) => startPointerDrag(e, "volume", v.id)}
+            onClick={() => onToggleVolume(v.id)}
+            className={cn(
+              "group flex cursor-pointer items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-sm text-fg transition-all duration-150 hover:bg-hover",
+              drag?.id === v.id && "opacity-40",
+              ((dropTarget?.kind === "chapter" && dropTarget.group === v.id && dropTarget.beforeId === null) ||
+                (dropTarget?.kind === "volume" && dropTarget.group === v.id && dropTarget.beforeId === null)) &&
+                "bg-accent-soft ring-2 ring-accent/60",
+            )}
+          >
+            {expanded ? (
+              <ChevronDown className="size-3.5 shrink-0 text-fg-muted" />
+            ) : (
+              <ChevronRight className="size-3.5 shrink-0 text-fg-muted" />
+            )}
+            {expanded ? (
+              <FolderOpen className="size-3.5 shrink-0 text-accent" />
+            ) : (
+              <Folder className="size-3.5 shrink-0 text-accent/70" />
+            )}
+            <span className="min-w-0 flex-1 truncate">{v.title}</span>
+            <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+              <button
+                title={`在该${folderLabel}新建${fileLabel}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startCreate({ type: "chapter", volumeId: v.id });
+                }}
+                className="flex h-5 w-5 items-center justify-center rounded-md text-fg-muted hover:bg-active hover:text-fg"
+              >
+                <Plus className="size-3" />
+              </button>
+              <button
+                title={`新建子${folderLabel}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startCreate({ type: "volume", volumeId: v.id });
+                }}
+                className="flex h-5 w-5 items-center justify-center rounded-md text-fg-muted hover:bg-active hover:text-fg"
+              >
+                <FolderPlus className="size-3" />
+              </button>
+              <button
+                title={`重命名${folderLabel}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startEdit("volume", v.id, v.title);
+                }}
+                className="flex h-5 w-5 items-center justify-center rounded-md text-fg-muted hover:bg-active hover:text-fg"
+              >
+                <Pencil className="size-3" />
+              </button>
+              <button
+                title={`删除${folderLabel}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirm({ kind: "volume", id: v.id, title: v.title });
+                }}
+                className="flex h-5 w-5 items-center justify-center rounded-md text-fg-muted hover:bg-danger/15 hover:text-danger"
+              >
+                <Trash2 className="size-3" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 卷内章节与子分卷（折叠时隐藏；空白处拖入 = 追加卷末） */}
+        {expanded && (
+          <ul
+            className="relative ml-3.5 space-y-1 border-l border-line/60 pl-2 pt-0.5"
+            data-drop="group-end"
+            data-drop-group={v.id}
+          >
+            {groupEndLine(v.id)}
+            {subVolumes.map((k) => renderVolumeNode(k))}
+            {children.map((c) => (
+              <li key={c.id} className="relative">
+                {renderChapter(c)}
+              </li>
+            ))}
+            {creating?.type === "chapter" && creating.volumeId === v.id && (
+              <li>{renderCreateInput(`输入${fileLabel}名`, "file")}</li>
+            )}
+            {creating?.type === "volume" && creating.volumeId === v.id && (
+              <li className="pt-0.5">{renderCreateInput(`输入${folderLabel}名`, "folder")}</li>
+            )}
+          </ul>
+        )}
+      </li>
+    );
+  };
+
+    const groupEndLine = (group: string) =>
+    (dropTarget?.kind === "chapter" || dropTarget?.kind === "volume") &&
+    dropTarget.group === group && dropTarget.beforeId === null ? (
       <div className="absolute inset-x-1 -bottom-[7px] z-10 h-0.5 rounded-full bg-accent" />
     ) : null;
 
@@ -486,137 +622,37 @@ export function ChapterSidebar() {
       <ul className="relative space-y-1" data-drop="group-end" data-drop-group="">
         {groupEndLine("")}
 
-        {/* ===== 分卷（搜索时只显示有命中的卷，并强制展开） ===== */}
-        {displayVolumes.map((v) => {
-          const expanded = filtering || !isCollapsed(v.id);
-          const children = shownByVolume.get(v.id) ?? [];
-          return (
-            <li key={v.id} className="relative">
-              {dropTarget?.kind === "volume" && dropTarget.beforeId === v.id && (
-                <div className="absolute inset-x-1 -top-0.5 z-10 h-0.5 rounded-full bg-accent" />
-              )}
-              {editing?.kind === "volume" && editing.id === v.id ? (
-                rowShell("folder", (
-                  <input
-                    autoFocus
-                    value={editing.title}
-                    onChange={(e) => setEditing({ ...editing, title: e.target.value })}
-                    onFocus={(e) => e.currentTarget.select()}
-                    onBlur={commitEdit}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") commitEdit();
-                      if (e.key === "Escape") setEditing(null);
-                    }}
-                    className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-                  />
-                ))
-              ) : (
-                <div
-                  data-drop="volume"
-                  data-drop-id={v.id}
-                  onPointerDown={(e) => startPointerDrag(e, "volume", v.id)}
-                  onClick={() => onToggleVolume(v.id)}
-                  className={cn(
-                    "group flex cursor-pointer items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-sm text-fg transition-all duration-150 hover:bg-hover",
-                    drag?.id === v.id && "opacity-40",
-                    dropTarget?.kind === "chapter" &&
-                      dropTarget.group === v.id &&
-                      dropTarget.beforeId === null &&
-                      "bg-accent-soft ring-2 ring-accent/60",
-                  )}
-                >
-                  {expanded ? (
-                    <ChevronDown className="size-3.5 shrink-0 text-fg-muted" />
-                  ) : (
-                    <ChevronRight className="size-3.5 shrink-0 text-fg-muted" />
-                  )}
-                  {expanded ? (
-                    <FolderOpen className="size-3.5 shrink-0 text-accent" />
-                  ) : (
-                    <Folder className="size-3.5 shrink-0 text-accent/70" />
-                  )}
-                  <span className="min-w-0 flex-1 truncate">{v.title}</span>
-                  <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                    <button
-                      title={`在该${folderLabel}新建${fileLabel}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        startCreate({ type: "chapter", volumeId: v.id });
-                      }}
-                      className="flex h-5 w-5 items-center justify-center rounded-md text-fg-muted hover:bg-active hover:text-fg"
-                    >
-                      <Plus className="size-3" />
-                    </button>
-                    <button
-                      title={`重命名${folderLabel}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        startEdit("volume", v.id, v.title);
-                      }}
-                      className="flex h-5 w-5 items-center justify-center rounded-md text-fg-muted hover:bg-active hover:text-fg"
-                    >
-                      <Pencil className="size-3" />
-                    </button>
-                    <button
-                      title={`删除${folderLabel}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirm({ kind: "volume", id: v.id, title: v.title });
-                      }}
-                      className="flex h-5 w-5 items-center justify-center rounded-md text-fg-muted hover:bg-danger/15 hover:text-danger"
-                    >
-                      <Trash2 className="size-3" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* 卷内章节（折叠时隐藏；空白处拖入 = 追加卷末） */}
-              {expanded && (
-                <ul
-                  className="relative ml-3.5 space-y-1 border-l border-line/60 pl-2 pt-0.5"
-                  data-drop="group-end"
-                  data-drop-group={v.id}
-                >
-                  {groupEndLine(v.id)}
-                  {children.map((c) => (
-                    <li key={c.id} className="relative">
-                      {renderChapter(c)}
-                    </li>
-                  ))}
-                  {creating?.type === "chapter" && creating.volumeId === v.id && (
-                    <li>{renderCreateInput(`输入${fileLabel}名`, "file")}</li>
-                  )}
-                </ul>
-              )}
+        {/* ===== 分卷（递归，支持多级嵌套） ===== */}
+        {filtering ? (
+          shownTop.map((c) => (
+            <li key={c.id} className="relative">
+              {renderChapter(c)}
             </li>
-          );
-        })}
-
-        {/* ===== 新建分卷输入（新卷追加在分卷组末尾，位于顶层章节之前） ===== */}
-        {creating?.type === "volume" && (
-          <li className="pt-0.5">{renderCreateInput(`输入${folderLabel}名`, "folder")}</li>
-        )}
-
-        {/* ===== 顶层未分卷章节 ===== */}
-        {shownTop.length > 0 && displayVolumes.length > 0 && (
-          <li className="px-2.5 pb-0.5 pt-2 text-[11px] font-semibold tracking-[0.14em] text-fg-muted">
-            未{folderLabel}
-          </li>
-        )}
-        {shownTop.map((c) => (
-          <li key={c.id} className="relative">
-            {renderChapter(c)}
-          </li>
-        ))}
-
-        {/* ===== 新建章节输入（顶层） ===== */}
-        {creating?.type === "chapter" && !creating.volumeId && (
-          <li className="pt-0.5">{renderCreateInput(`输入${fileLabel}名`, "file")}</li>
+          ))
+        ) : (
+          <>
+            {topVolumes.map((v) => renderVolumeNode(v))}
+            {creating?.type === "volume" && !creating.volumeId && (
+              <li className="pt-0.5">{renderCreateInput(`输入${folderLabel}名`, "folder")}</li>
+            )}
+            {shownTop.length > 0 && topVolumes.length > 0 && (
+              <li className="px-2.5 pb-0.5 pt-2 text-[11px] font-semibold tracking-[0.14em] text-fg-muted">
+                未分组
+              </li>
+            )}
+            {shownTop.map((c) => (
+              <li key={c.id} className="relative">
+                {renderChapter(c)}
+              </li>
+            ))}
+            {creating?.type === "chapter" && !creating.volumeId && (
+              <li className="pt-0.5">{renderCreateInput(`输入${fileLabel}名`, "file")}</li>
+            )}
+          </>
         )}
 
         {/* ===== 搜索无结果 ===== */}
-        {filtering && shownTop.length === 0 && shownByVolume.size === 0 && (
+        {filtering && shownTop.length === 0 && (
           <li className="px-2.5 py-8 text-center text-xs text-fg-muted">
             未找到匹配「{query.trim()}」的{fileLabel}
           </li>
@@ -672,7 +708,7 @@ export function ChapterSidebar() {
                   <span className="min-w-0">
                     <span className="block text-sm font-medium text-fg-strong">只删除{folderLabel}</span>
                     <span className="block text-xs text-fg-muted">
-                      该{folderLabel}内{fileLabel}移到顶层（未{folderLabel}），正文保留
+                      该{folderLabel}内{fileLabel}移到顶层（未分组），正文保留
                     </span>
                   </span>
                 </button>

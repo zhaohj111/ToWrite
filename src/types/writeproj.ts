@@ -25,6 +25,8 @@ export interface VolumeMeta {
   id: string;
   title: string;
   order: number;
+  /** 上级分卷 id；缺省 = 顶层（支持多级嵌套） */
+  parentId?: string;
 }
 
 export interface StructureData {
@@ -84,6 +86,8 @@ export interface TimelineFolderMeta {
   id: string;
   title: string;
   order: number;
+  /** 上级分卷 id；缺省 = 顶层（支持多级嵌套） */
+  parentId?: string;
 }
 
 /** 一个时间轴实例（如「时间轴」）的完整文档：文件/分卷树 + 实例级共享图例 + 各文件内容 */
@@ -150,6 +154,8 @@ export interface LoreFolderMeta {
   id: string;
   title: string;
   order: number;
+  /** 上级分卷 id；缺省 = 顶层（支持多级嵌套） */
+  parentId?: string;
 }
 
 export interface LoreStructure {

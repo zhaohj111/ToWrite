@@ -94,7 +94,7 @@ interface TimelineState {
   ensureFile: (instanceId: string) => string | null;
   setCurrentFile: (instanceId: string, fileId: string) => void;
   closeTab: (instanceId: string, fileId: string) => void;
-  addFolder: (instanceId: string, title: string) => TimelineFolderMeta;
+  addFolder: (instanceId: string, title: string, parentId?: string) => TimelineFolderMeta;
   renameFolder: (instanceId: string, id: string, title: string) => void;
   deleteFolder: (instanceId: string, id: string) => void;
   deleteFolderWithContents: (instanceId: string, id: string) => void;
@@ -103,7 +103,7 @@ interface TimelineState {
   deleteFile: (instanceId: string, id: string) => void;
   /** 整文件替换轴体数据（v0.7 导入 .timeline 用） */
   setFileDoc: (instanceId: string, fileId: string, data: TimelineData) => void;
-  moveFolder: (instanceId: string, id: string, beforeId: string | null) => void;
+  moveFolder: (instanceId: string, id: string, parentId: string | undefined, beforeId: string | null) => void;
   moveFile: (
     instanceId: string,
     id: string,
@@ -234,9 +234,11 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
     });
   },
 
-  addFolder: (instanceId, title) => {
+  addFolder: (instanceId, title, parentId) => {
     const cur = get().slices[instanceId] ?? EMPTY_TIMELINE_SLICE;
-    const folder: TimelineFolderMeta = { id: crypto.randomUUID(), title, order: cur.folders.length };
+    const group = parentId ?? "";
+    const order = cur.folders.filter((f) => (f.parentId ?? "") === group).length;
+    const folder: TimelineFolderMeta = { id: crypto.randomUUID(), title, order, parentId };
     set({
       slices: {
         ...get().slices,
@@ -261,13 +263,18 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 
   deleteFolder: (instanceId, id) => {
     const cur = get().slices[instanceId] ?? EMPTY_TIMELINE_SLICE;
+    const parent = cur.folders.find((f) => f.id === id)?.parentId;
+    const parentGroup = parent ?? "";
+    // 只删分卷：子分卷与文件上提到父级
     set({
       slices: {
         ...get().slices,
         [instanceId]: {
           ...cur,
-          folders: cur.folders.filter((f) => f.id !== id),
-          files: cur.files.map((f) => (f.folderId === id ? { ...f, folderId: undefined } : f)),
+          folders: cur.folders
+            .filter((f) => f.id !== id)
+            .map((f) => (f.parentId === id ? { ...f, parentId: parent } : f)),
+          files: cur.files.map((f) => (f.folderId === id ? { ...f, folderId: parent } : f)),
         },
       },
     });
@@ -275,7 +282,19 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 
   deleteFolderWithContents: (instanceId, id) => {
     const cur = get().slices[instanceId] ?? EMPTY_TIMELINE_SLICE;
-    const inside = new Set(cur.files.filter((f) => f.folderId === id).map((f) => f.id));
+    // 收集整个子树的分卷 id（含自身与全部后代）
+    const subtree = new Set<string>([id]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const f of cur.folders) {
+        if (f.parentId && subtree.has(f.parentId) && !subtree.has(f.id)) {
+          subtree.add(f.id);
+          grew = true;
+        }
+      }
+    }
+    const inside = new Set(cur.files.filter((f) => f.folderId && subtree.has(f.folderId)).map((f) => f.id));
     const docs = { ...cur.docs };
     for (const fid of inside) delete docs[fid];
     let current = cur.currentFileId;
@@ -288,8 +307,8 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
         ...get().slices,
         [instanceId]: {
           ...cur,
-          folders: cur.folders.filter((f) => f.id !== id),
-          files: cur.files.filter((f) => f.folderId !== id),
+          folders: cur.folders.filter((f) => !subtree.has(f.id)),
+          files: cur.files.filter((f) => !inside.has(f.id)),
           docs,
           currentFileId: current,
           openTabs: current ? pushTab(tabs, current) : tabs,
@@ -369,19 +388,33 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
     });
   },
 
-  moveFolder: (instanceId, id, beforeId) => {
+  moveFolder: (instanceId, id, parentId, beforeId) => {
     const cur = get().slices[instanceId] ?? EMPTY_TIMELINE_SLICE;
     const src = cur.folders.find((f) => f.id === id);
     if (!src) return;
+    const group = parentId ?? "";
+    // 不允许移动进自身或其子孙分卷
+    if (group === id) return;
+    let p = group ? cur.folders.find((f) => f.id === group) : undefined;
+    while (p) {
+      if (p.id === id) return;
+      const pp = p.parentId;
+      p = pp ? cur.folders.find((f) => f.id === pp) : undefined;
+    }
     const rest = cur.folders.filter((f) => f.id !== id);
-    const idx = beforeId ? rest.findIndex((f) => f.id === beforeId) : rest.length;
-    const insertAt = idx < 0 ? rest.length : idx;
-    const folders = [...rest.slice(0, insertAt), src, ...rest.slice(insertAt)].map((f, i) => ({
+    const siblings = rest.filter((f) => (f.parentId ?? "") === group);
+    const idx = beforeId ? siblings.findIndex((f) => f.id === beforeId) : siblings.length;
+    const insertAt = idx < 0 ? siblings.length : idx;
+    const moved = { ...src, parentId };
+    const ordered = [...siblings.slice(0, insertAt), moved, ...siblings.slice(insertAt)].map((f, i) => ({
       ...f,
       order: i,
     }));
+    // 目标组重排（序号重新编号），其余组保持原样
+    const finalFolders = rest.filter((f) => (f.parentId ?? "") !== group);
+    finalFolders.push(...ordered);
     set({
-      slices: { ...get().slices, [instanceId]: { ...cur, folders } },
+      slices: { ...get().slices, [instanceId]: { ...cur, folders: finalFolders } },
     });
   },
 

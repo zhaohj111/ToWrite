@@ -67,11 +67,11 @@ interface EditorState {
   addChapter: (instanceId: string, title: string, volumeId?: string) => ChapterMeta;
   renameChapter: (instanceId: string, id: string, title: string) => void;
   deleteChapter: (instanceId: string, id: string) => void;
-  addVolume: (instanceId: string, title: string) => VolumeMeta;
+  addVolume: (instanceId: string, title: string, parentId?: string) => VolumeMeta;
   renameVolume: (instanceId: string, id: string, title: string) => void;
   deleteVolume: (instanceId: string, id: string) => void;
   deleteVolumeWithContents: (instanceId: string, id: string) => void;
-  moveVolume: (instanceId: string, id: string, beforeId: string | null) => void;
+  moveVolume: (instanceId: string, id: string, parentId: string | undefined, beforeId: string | null) => void;
   moveChapter: (
     instanceId: string,
     id: string,
@@ -176,9 +176,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     return chapter;
   },
 
-  addVolume: (instanceId, title) => {
+  addVolume: (instanceId, title, parentId) => {
     const cur = get().slices[instanceId] ?? EMPTY_SLICE;
-    const volume: VolumeMeta = { id: crypto.randomUUID(), title, order: cur.volumes.length };
+    const group = parentId ?? "";
+    const order = cur.volumes.filter((v) => (v.parentId ?? "") === group).length;
+    const volume: VolumeMeta = { id: crypto.randomUUID(), title, order, parentId };
     set({
       slices: {
         ...get().slices,
@@ -245,14 +247,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   deleteVolume: (instanceId, id) => {
     const cur = get().slices[instanceId] ?? EMPTY_SLICE;
+    const parent = cur.volumes.find((v) => v.id === id)?.parentId;
+    // 只删分卷：子分卷与章节上提到父级
     set({
       slices: {
         ...get().slices,
         [instanceId]: {
           ...cur,
-          volumes: cur.volumes.filter((v) => v.id !== id),
+          volumes: cur.volumes
+            .filter((v) => v.id !== id)
+            .map((v) => (v.parentId === id ? { ...v, parentId: parent } : v)),
           chapters: cur.chapters.map((c) =>
-            c.volumeId === id ? { ...c, volumeId: undefined } : c,
+            c.volumeId === id ? { ...c, volumeId: parent } : c,
           ),
         },
       },
@@ -261,7 +267,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   deleteVolumeWithContents: (instanceId, id) => {
     const cur = get().slices[instanceId] ?? EMPTY_SLICE;
-    const inside = new Set(cur.chapters.filter((c) => c.volumeId === id).map((c) => c.id));
+    // 收集整个子树的分卷 id（含自身与全部后代）
+    const subtree = new Set<string>([id]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const v of cur.volumes) {
+        if (v.parentId && subtree.has(v.parentId) && !subtree.has(v.id)) {
+          subtree.add(v.id);
+          grew = true;
+        }
+      }
+    }
+    const inside = new Set(cur.chapters.filter((c) => c.volumeId && subtree.has(c.volumeId)).map((c) => c.id));
     const newContents = { ...cur.contents };
     for (const cid of inside) delete newContents[cid];
     let current = cur.currentChapterId;
@@ -274,8 +292,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         ...get().slices,
         [instanceId]: {
           ...cur,
-          volumes: cur.volumes.filter((v) => v.id !== id),
-          chapters: cur.chapters.filter((c) => c.volumeId !== id),
+          volumes: cur.volumes.filter((v) => !subtree.has(v.id)),
+          chapters: cur.chapters.filter((c) => !inside.has(c.id)),
           contents: newContents,
           currentChapterId: current,
           openTabs: current ? pushTab(tabs, current) : tabs,
@@ -284,18 +302,32 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     });
   },
 
-  moveVolume: (instanceId, id, beforeId) => {
+  moveVolume: (instanceId, id, parentId, beforeId) => {
     const cur = get().slices[instanceId] ?? EMPTY_SLICE;
     const src = cur.volumes.find((v) => v.id === id);
     if (!src) return;
+    const group = parentId ?? "";
+    // 不允许移动进自身或其子孙分卷
+    if (group === id) return;
+    let p = group ? cur.volumes.find((v) => v.id === group) : undefined;
+    while (p) {
+      if (p.id === id) return;
+      const pp = p.parentId;
+      p = pp ? cur.volumes.find((v) => v.id === pp) : undefined;
+    }
     const rest = cur.volumes.filter((v) => v.id !== id);
-    const idx = beforeId ? rest.findIndex((v) => v.id === beforeId) : rest.length;
-    const insertAt = idx < 0 ? rest.length : idx;
-    const volumes = [...rest.slice(0, insertAt), src, ...rest.slice(insertAt)].map(
+    const siblings = rest.filter((v) => (v.parentId ?? "") === group);
+    const idx = beforeId ? siblings.findIndex((v) => v.id === beforeId) : siblings.length;
+    const insertAt = idx < 0 ? siblings.length : idx;
+    const moved = { ...src, parentId };
+    const ordered = [...siblings.slice(0, insertAt), moved, ...siblings.slice(insertAt)].map(
       (v, i) => ({ ...v, order: i }),
     );
+    // 目标组重排（序号重新编号），其余组保持原样
+    const finalVolumes = rest.filter((v) => (v.parentId ?? "") !== group);
+    finalVolumes.push(...ordered);
     set({
-      slices: { ...get().slices, [instanceId]: { ...cur, volumes } },
+      slices: { ...get().slices, [instanceId]: { ...cur, volumes: finalVolumes } },
     });
   },
 

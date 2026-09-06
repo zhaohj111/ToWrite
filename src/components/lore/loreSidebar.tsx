@@ -8,9 +8,8 @@ import {
   ChevronRight,
   FilePlus2,
   Folder,
-  FolderOpen,
   FolderPlus,
-  Pencil,
+  FolderOpen,  Pencil,
   Plus,
   Search,
   Trash2,
@@ -35,9 +34,9 @@ import {
 } from "@/components/editor/editorInstanceContext";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { cn } from "@/lib/cn";
-import type { LoreFileMeta } from "@/types/writeproj";
+import type { LoreFileMeta, LoreFolderMeta } from "@/types/writeproj";
 
-type Creating = { type: "file"; folderId?: string } | { type: "folder" } | null;
+type Creating = { type: "file"; folderId?: string } | { type: "folder"; folderId?: string } | null;
 type Editing = { kind: "file" | "folder"; id: string; title: string } | null;
 type Confirm =
   | { kind: "file"; id: string; title: string }
@@ -45,7 +44,7 @@ type Confirm =
   | null;
 type DropTarget =
   | { kind: "file"; group: string; beforeId: string | null }
-  | { kind: "folder"; beforeId: string | null }
+  | { kind: "folder"; group: string; beforeId: string | null }
   | null;
 
 export function LoreSidebar() {
@@ -111,22 +110,28 @@ export function LoreSidebar() {
   const filtering = q.length > 0;
   const { byFolder: shownByFolder, top: shownTop } = useMemo(() => {
     if (!filtering) return { byFolder, top };
-    const fbf = new Map<string, LoreFileMeta[]>();
+    // 过滤时扁平显示所有命中文件（忽略分卷层级）
     const ftop: LoreFileMeta[] = [];
     for (const f of files) {
-      if (!f.title.toLowerCase().includes(q)) continue;
-      const inFolder = !!f.folderId && folders.some((v) => v.id === f.folderId);
-      if (inFolder) {
-        const arr = fbf.get(f.folderId!) ?? [];
-        arr.push(f);
-        fbf.set(f.folderId!, arr);
-      } else {
-        ftop.push(f);
-      }
+      if (f.title.toLowerCase().includes(q)) ftop.push(f);
     }
-    return { byFolder: fbf, top: ftop };
+    ftop.sort((a, b) => a.order - b.order);
+    return { byFolder, top: ftop };
   }, [files, folders, byFolder, top, filtering, q]);
-  const displayFolders = filtering ? folders.filter((v) => shownByFolder.has(v.id)) : folders;
+
+  // 分卷按上级分组（parentId ?? "" = 顶层），支持多级嵌套
+  const foldersByParent = useMemo(() => {
+    const map = new Map<string, LoreFolderMeta[]>();
+    for (const v of folders) {
+      const g = v.parentId ?? "";
+      const arr = map.get(g) ?? [];
+      arr.push(v);
+      map.set(g, arr);
+    }
+    for (const arr of map.values()) arr.sort((a, b) => a.order - b.order);
+    return map;
+  }, [folders]);
+  const topFolders = foldersByParent.get("") ?? [];
 
   // —— 指针拖拽（不依赖 HTML5 DnD）——
   const pendingRef = useRef<{ kind: "file" | "folder"; id: string; x: number; y: number } | null>(null);
@@ -184,14 +189,16 @@ export function LoreSidebar() {
         const id = target.dataset.dropId ?? "";
         if (d.kind === "file") return { kind: "file", group: id, beforeId: null }; // 追加到该分卷
         const rect = target.getBoundingClientRect();
-        if (y < rect.top + rect.height / 2) return { kind: "folder", beforeId: id };
-        const idx = fs.findIndex((v) => v.id === id);
-        return { kind: "folder", beforeId: idx >= 0 ? (fs[idx + 1]?.id ?? null) : null };
+        const parentGroup = target.dataset.dropGroup ?? "";
+        // 上半 = 该分卷同级前插入（组 = 其父级）；下半 = 拖入该分卷（追加为其最后子分卷）
+        if (y < rect.top + rect.height / 2) return { kind: "folder", group: parentGroup, beforeId: id };
+        return { kind: "folder", group: id, beforeId: null };
       }
 
       if (drop === "group-end") {
-        if (d.kind !== "file") return null;
         const group = target.dataset.dropGroup ?? "";
+        if (d.kind === "folder") return { kind: "folder", group, beforeId: null }; // 追加为组末兄弟分卷
+        if (d.kind !== "file") return null;
         // 光标不在任何行上（行间距/组末空白）：按 y 相对该组各行的上下半定边界——
         // 光标在某行上半 → 插到该行前；下半 → 插到其后；低于最后一行 → 追加组末。
         // 指示线落在光标附近，而不是跳到列表最底部（长列表下会被卷出视口、像被遮挡）。
@@ -235,7 +242,9 @@ export function LoreSidebar() {
         const t = dropRef.current;
         if (t) {
           if (d.kind === "folder") {
-            if (t.kind === "folder" && t.beforeId !== d.id) moveFolder(instanceId, d.id, t.beforeId);
+            if (t.kind === "folder" && t.beforeId !== d.id) {
+              moveFolder(instanceId, d.id, t.group === "" ? undefined : t.group, t.beforeId);
+            }
           } else if (t.kind === "file" && t.beforeId !== d.id) {
             moveFile(instanceId, d.id, {
               folderId: t.group === "" ? undefined : t.group,
@@ -311,7 +320,7 @@ export function LoreSidebar() {
     if (!creating) return;
     const title = draft.trim();
     if (title) {
-      if (creating.type === "folder") addFolder(instanceId, title);
+      if (creating.type === "folder") addFolder(instanceId, title, creating.folderId);
       else addFile(instanceId, title, creating.folderId);
     }
     setCreating(null);
@@ -444,8 +453,132 @@ export function LoreSidebar() {
       />
     ), true);
 
-  const groupEndLine = (group: string) =>
-    dropTarget?.kind === "file" && dropTarget.group === group && dropTarget.beforeId === null ? (
+  /** 递归渲染分卷节点：子分卷 + 文件 + 两级新建输入（多级嵌套） */
+  const renderFolderNode = (v: LoreFolderMeta) => {
+    const expanded = filtering || !isCollapsed(v.id);
+    const children = shownByFolder.get(v.id) ?? [];
+    const subFolders = foldersByParent.get(v.id) ?? [];
+    return (
+      <li key={v.id} className="relative">
+        {dropTarget?.kind === "folder" &&
+          dropTarget.group === (v.parentId ?? "") &&
+          dropTarget.beforeId === v.id && (
+          <div className="absolute inset-x-1 -top-0.5 z-10 h-0.5 rounded-full bg-accent" />
+        )}
+        {editing?.kind === "folder" && editing.id === v.id ? (
+          rowShell("folder", (
+            <input
+              autoFocus
+              value={editing.title}
+              onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+              onFocus={(e) => e.currentTarget.select()}
+              onBlur={commitEdit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitEdit();
+                if (e.key === "Escape") setEditing(null);
+              }}
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+            />
+          ))
+        ) : (
+          <div
+            data-drop="folder"
+            data-drop-id={v.id}
+            data-drop-group={v.parentId ?? ""}
+            onPointerDown={(e) => startPointerDrag(e, "folder", v.id)}
+            onClick={() => onToggleFolder(v.id)}
+            className={cn(
+              "group flex cursor-pointer items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-sm text-fg transition-all duration-150 hover:bg-hover",
+              drag?.id === v.id && "opacity-40",
+              ((dropTarget?.kind === "file" && dropTarget.group === v.id && dropTarget.beforeId === null) ||
+                (dropTarget?.kind === "folder" && dropTarget.group === v.id && dropTarget.beforeId === null)) &&
+                "bg-accent-soft ring-2 ring-accent/60",
+            )}
+          >
+            {expanded ? (
+              <ChevronDown className="size-3.5 shrink-0 text-fg-muted" />
+            ) : (
+              <ChevronRight className="size-3.5 shrink-0 text-fg-muted" />
+            )}
+            {expanded ? (
+              <FolderOpen className="size-3.5 shrink-0 text-accent" />
+            ) : (
+              <Folder className="size-3.5 shrink-0 text-accent/70" />
+            )}
+            <span className="min-w-0 flex-1 truncate">{v.title}</span>
+            <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+              <button
+                title={`在该${folderLabel}新建${fileLabel}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startCreate({ type: "file", folderId: v.id });
+                }}
+                className="flex h-5 w-5 items-center justify-center rounded-md text-fg-muted hover:bg-active hover:text-fg"
+              >
+                <Plus className="size-3" />
+              </button>
+              <button
+                title={`新建子${folderLabel}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startCreate({ type: "folder", folderId: v.id });
+                }}
+                className="flex h-5 w-5 items-center justify-center rounded-md text-fg-muted hover:bg-active hover:text-fg"
+              >
+                <FolderPlus className="size-3" />
+              </button>
+              <button
+                title={`重命名${folderLabel}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startEdit("folder", v.id, v.title);
+                }}
+                className="flex h-5 w-5 items-center justify-center rounded-md text-fg-muted hover:bg-active hover:text-fg"
+              >
+                <Pencil className="size-3" />
+              </button>
+              <button
+                title={`删除${folderLabel}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirm({ kind: "folder", id: v.id, title: v.title });
+                }}
+                className="flex h-5 w-5 items-center justify-center rounded-md text-fg-muted hover:bg-danger/15 hover:text-danger"
+              >
+                <Trash2 className="size-3" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {expanded && (
+          <ul
+            className="relative ml-3.5 space-y-1 border-l border-line/60 pl-2 pt-0.5"
+            data-drop="group-end"
+            data-drop-group={v.id}
+          >
+            {groupEndLine(v.id)}
+            {subFolders.map((k) => renderFolderNode(k))}
+            {children.map((f) => (
+              <li key={f.id} className="relative">
+                {renderFile(f)}
+              </li>
+            ))}
+            {creating?.type === "file" && creating.folderId === v.id && (
+              <li>{renderCreateInput(`输入${fileLabel}名`, "file")}</li>
+            )}
+            {creating?.type === "folder" && creating.folderId === v.id && (
+              <li className="pt-0.5">{renderCreateInput(`输入${folderLabel}名`, "folder")}</li>
+            )}
+          </ul>
+        )}
+      </li>
+    );
+  };
+
+    const groupEndLine = (group: string) =>
+    (dropTarget?.kind === "file" || dropTarget?.kind === "folder") &&
+    dropTarget.group === group && dropTarget.beforeId === null ? (
       <div className="absolute inset-x-1 -bottom-[7px] z-10 h-0.5 rounded-full bg-accent" />
     ) : null;
 
@@ -499,120 +632,28 @@ export function LoreSidebar() {
       <ul className="relative space-y-1" data-drop="group-end" data-drop-group="">
         {groupEndLine("")}
 
-        {/* ===== 分卷 ===== */}
-        {displayFolders.map((v) => {
-          const expanded = filtering || !isCollapsed(v.id);
-          const children = shownByFolder.get(v.id) ?? [];
-          return (
-            <li key={v.id} className="relative">
-              {dropTarget?.kind === "folder" && dropTarget.beforeId === v.id && (
-                <div className="absolute inset-x-1 -top-0.5 z-10 h-0.5 rounded-full bg-accent" />
-              )}
-              {editing?.kind === "folder" && editing.id === v.id ? (
-                rowShell("folder", (
-                  <input
-                    autoFocus
-                    value={editing.title}
-                    onChange={(e) => setEditing({ ...editing, title: e.target.value })}
-                    onFocus={(e) => e.currentTarget.select()}
-                    onBlur={commitEdit}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") commitEdit();
-                      if (e.key === "Escape") setEditing(null);
-                    }}
-                    className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-                  />
-                ))
-              ) : (
-                <div
-                  data-drop="folder"
-                  data-drop-id={v.id}
-                  onPointerDown={(e) => startPointerDrag(e, "folder", v.id)}
-                  onClick={() => onToggleFolder(v.id)}
-                  className={cn(
-                    "group flex cursor-pointer items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-sm text-fg transition-all duration-150 hover:bg-hover",
-                    drag?.id === v.id && "opacity-40",
-                    dropTarget?.kind === "file" &&
-                      dropTarget.group === v.id &&
-                      dropTarget.beforeId === null &&
-                      "bg-accent-soft ring-2 ring-accent/60",
-                  )}
-                >
-                  {expanded ? (
-                    <ChevronDown className="size-3.5 shrink-0 text-fg-muted" />
-                  ) : (
-                    <ChevronRight className="size-3.5 shrink-0 text-fg-muted" />
-                  )}
-                  {expanded ? (
-                    <FolderOpen className="size-3.5 shrink-0 text-accent" />
-                  ) : (
-                    <Folder className="size-3.5 shrink-0 text-accent/70" />
-                  )}
-                  <span className="min-w-0 flex-1 truncate">{v.title}</span>
-                  <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                    <button
-                      title={`在该${folderLabel}新建${fileLabel}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        startCreate({ type: "file", folderId: v.id });
-                      }}
-                      className="flex h-5 w-5 items-center justify-center rounded-md text-fg-muted hover:bg-active hover:text-fg"
-                    >
-                      <Plus className="size-3" />
-                    </button>
-                    <button
-                      title={`重命名${folderLabel}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        startEdit("folder", v.id, v.title);
-                      }}
-                      className="flex h-5 w-5 items-center justify-center rounded-md text-fg-muted hover:bg-active hover:text-fg"
-                    >
-                      <Pencil className="size-3" />
-                    </button>
-                    <button
-                      title={`删除${folderLabel}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirm({ kind: "folder", id: v.id, title: v.title });
-                      }}
-                      className="flex h-5 w-5 items-center justify-center rounded-md text-fg-muted hover:bg-danger/15 hover:text-danger"
-                    >
-                      <Trash2 className="size-3" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {expanded && (
-                <ul
-                  className="relative ml-3.5 space-y-1 border-l border-line/60 pl-2 pt-0.5"
-                  data-drop="group-end"
-                  data-drop-group={v.id}
-                >
-                  {groupEndLine(v.id)}
-                  {children.map((f) => (
-                    <li key={f.id} className="relative">
-                      {renderFile(f)}
-                    </li>
-                  ))}
-                  {creating?.type === "file" && creating.folderId === v.id && (
-                    <li>{renderCreateInput(`输入${fileLabel}名`, "file")}</li>
-                  )}
-                </ul>
-              )}
+        {/* ===== 分卷（递归，支持多级嵌套） ===== */}
+        {filtering ? (
+          shownTop.map((f) => (
+            <li key={f.id} className="relative">
+              {renderFile(f)}
             </li>
-          );
-        })}
+          ))
+        ) : (
+          <>
+            {topFolders.map((v) => renderFolderNode(v))}
+            {creating?.type === "folder" && !creating.folderId && (
+              <li className="pt-0.5">{renderCreateInput(`输入${folderLabel}名`, "folder")}</li>
+            )}
+          </>
+        )}
 
-        {creating?.type === "folder" && <li className="pt-0.5">{renderCreateInput(`输入${folderLabel}名`, "folder")}</li>}
-
-        {shownTop.length > 0 && displayFolders.length > 0 && (
+        {!filtering && shownTop.length > 0 && topFolders.length > 0 && (
           <li className="px-2.5 pb-0.5 pt-2 text-[11px] font-semibold tracking-[0.14em] text-fg-muted">
-            未{folderLabel}
+            未分组
           </li>
         )}
-        {shownTop.map((f) => (
+        {!filtering && shownTop.map((f) => (
           <li key={f.id} className="relative">
             {renderFile(f)}
           </li>
@@ -622,7 +663,7 @@ export function LoreSidebar() {
           <li className="pt-0.5">{renderCreateInput(`输入${fileLabel}名`, "file")}</li>
         )}
 
-        {filtering && shownTop.length === 0 && shownByFolder.size === 0 && (
+        {filtering && shownTop.length === 0 && (
           <li className="px-2.5 py-8 text-center text-xs text-fg-muted">
             未找到匹配「{query.trim()}」的{fileLabel}
           </li>
