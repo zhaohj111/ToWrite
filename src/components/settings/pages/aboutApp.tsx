@@ -43,10 +43,19 @@ export function LicenseInfo() {
 }
 
 export function FeedbackEntry() {
+  const openIssues = () => {
+    const url = "https://github.com/zhaohj111/ToWrite/issues";
+    if (isTauri()) void openUrl(url);
+    else window.open(url, "_blank", "noopener,noreferrer");
+  };
   return (
-    <span className="flex items-center gap-1 text-[13px] text-fg-muted">
-      反馈渠道与使用文档将在 v1.0 提供
+    <button
+      type="button"
+      onClick={openIssues}
+      className="inline-flex items-center gap-1.5 text-[13px] text-accent transition-colors hover:underline"
+    >
+      反馈 Bug / 提交建议（GitHub Issues）
       <ExternalLink className="size-3.5" />
-    </span>
+    </button>
   );
 }

@@ -223,9 +223,9 @@ export function registerConfigPages(ctx: PluginContext): void {
         },
         {
           id: "feedback",
-          title: "反馈与文档",
-          description: "反馈渠道与使用文档将在 v1.0 提供。",
-          keywords: ["反馈", "feedback", "文档", "帮助", "支持"],
+          title: "反馈",
+          description: "",
+          keywords: ["反馈", "feedback","帮助", "支持"],
           scope: "app",
           path: "关于 > 关于应用",
           render: () => <FeedbackEntry />,
@@ -366,7 +366,6 @@ ctx.registerContribution("settings.pages", {
       path: "帮助 > 常见问题",
       scope: "app",
       items: [],
-      // 占位页：高频问题整理中
       component: FaqPage,
     });
 
