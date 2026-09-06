@@ -19,7 +19,7 @@ export const coreConfigModule: ModuleContract = {
   kind: "core",
   enabled: true,
   author: "拓文官方",
-  version: "0.6.4",
+  version: "0.6.5",
   activate: (ctx) => {
     // 全部设置页注册在 pagesContribs.tsx
     registerConfigPages(ctx);

@@ -27,7 +27,7 @@ export const coreEditorModule: ModuleContract = {
   kind: "heavy",
   enabled: true,
   author: "拓文官方",
-  version: "0.6.2",
+  version: "0.6.3",
   // 设置字段声明与出厂默认（级联第 ③ 层）在 settings.json
   settings: editorSettings as unknown as Record<string, SettingFieldDef>,
   views: {

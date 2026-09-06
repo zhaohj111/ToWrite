@@ -21,7 +21,7 @@ export const coreTimelineModule: ModuleContract = {
   kind: "heavy",
   enabled: true,
   author: "拓文官方",
-  version: "0.6.2",
+  version: "0.6.3",
   // 侧栏命名配置（文件名 / 文件夹名）出厂默认在 settings.json
   settings: timelineSettings as unknown as Record<string, SettingFieldDef>,
   views: {
