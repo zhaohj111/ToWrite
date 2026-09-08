@@ -80,7 +80,7 @@ export function UpdateControl() {
           {notes && (
             // 更新说明区域：高度随内容自适应，最大高度取「视口 42% 与 400px 较小值」，
             // 超出后在区域内滚动浏览（thin-scrollbar 细滚动条，overscroll 不冒泡到设置页）。
-            <div className="thin-scrollbar max-h-[min(42vh,400px)] overflow-y-auto overscroll-contain rounded-md bg-panel-2/40 px-2.5 py-1.5">
+            <div className="thin-scrollbar max-h-[min(42vh,400px)] overflow-y-auto overscroll-contain rounded-lg border border-line/50 bg-panel-2/40 py-2 pl-3 pr-1.5 [scrollbar-gutter:stable]">
               <Markdown source={notes} />
             </div>
           )}

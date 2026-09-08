@@ -186,13 +186,28 @@ textarea,
   display: none;
 }
 
-/* 细滚动条：用于小色块等紧凑滚动区，避免遮挡内容 */
+/* 细滚动条：用于小色块、更新说明等紧凑滚动区，避免遮挡内容。
+   滑块为圆头胶囊、悬停加深；轨道透明，不挤压内容（配合 scrollbar-gutter: stable）。 */
 .thin-scrollbar {
   scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar) transparent;
 }
 .thin-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-line-strong);
+  background-clip: content-box;
 }
 
 /* ================================================================
