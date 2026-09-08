@@ -80,6 +80,9 @@ pub struct VolumeMeta {
     pub title: String,
     #[serde(default)]
     pub order: u32,
+    /// 上级分卷 id；缺省 = 顶层（多级嵌套）
+    #[serde(default)]
+    pub parent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -212,6 +215,9 @@ pub struct LoreFolderMeta {
     pub title: String,
     #[serde(default)]
     pub order: u32,
+    /// 上级分卷 id；缺省 = 顶层（多级嵌套）
+    #[serde(default)]
+    pub parent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -262,6 +268,9 @@ pub struct TimelineFolderMeta {
     pub title: String,
     #[serde(default)]
     pub order: u32,
+    /// 上级分卷 id；缺省 = 顶层（多级嵌套）
+    #[serde(default)]
+    pub parent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

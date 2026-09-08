@@ -34,6 +34,7 @@ import {
 } from "@/components/editor/editorInstanceContext";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { cn } from "@/lib/cn";
+import { useSidebarExpanded } from "@/lib/sidebarExpanded";
 import type { LoreFileMeta, LoreFolderMeta } from "@/types/writeproj";
 
 type Creating = { type: "file"; folderId?: string } | { type: "folder"; folderId?: string } | null;
@@ -79,7 +80,6 @@ export function LoreSidebar() {
   const [creating, setCreating] = useState<Creating>(null);
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState<Editing>(null);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [drag, setDrag] = useState<{ kind: "file" | "folder"; id: string } | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget>(null);
@@ -285,14 +285,10 @@ export function LoreSidebar() {
     };
   }, [moveFile, moveFolder, instanceId]);
 
-  const isCollapsed = (id: string) => collapsed.has(id);
-  const toggleCollapse = (id: string) =>
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  // 展开状态按「工程 + 实例」持久化：重开工程恢复上次样子，无记录默认折叠
+  const { isExpanded, toggleExpanded, expand: expandFolder } = useSidebarExpanded(instanceId);
+  const isCollapsed = (id: string) => !isExpanded(id);
+  const toggleCollapse = (id: string) => toggleExpanded(id);
 
   const onSelectFile = (id: string) => {
     if (suppressClickRef.current) {
@@ -313,6 +309,8 @@ export function LoreSidebar() {
   const startCreate = (c: NonNullable<Creating>) => {
     setEditing(null);
     setDraft("");
+    // 在文件夹内新建时自动展开该文件夹，保证输入行可见
+    if (c.folderId) expandFolder(c.folderId);
     setCreating(c);
   };
 
