@@ -3,7 +3,7 @@
 // 内容优先级：检查更新时从 GitHub 拉取的最新 CHANGELOG.md > 随包内置版本（source prop）。
 // 首次打开若尚未拉取则后台刷新一次；大纲旁提供手动「刷新」按钮。
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Markdown, parseHeadings } from "@/components/ui/markdown";
 import { useUpdateStore } from "@/stores/updateStore";
@@ -25,6 +25,8 @@ export function ChangelogPage({ source }: { source: string }) {
     [headings],
   );
   const [active, setActive] = useState(-1);
+  /** 右侧正文滚动容器：作为大纲高亮观察根，保证内部滚动时高亮准确 */
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // 首次打开且尚未拉取到 GitHub 版本时，后台拉取最新更新日志（失败回退随包内置，不打扰）
   useEffect(() => {
@@ -58,16 +60,16 @@ export function ChangelogPage({ source }: { source: string }) {
           }
         }
       },
-      { rootMargin: "-70px 0px -70% 0px" },
+      { root: contentRef.current, rootMargin: "0px 0px -72% 0px" },
     );
     els.forEach((el) => obs.observe(el));
     return () => obs.disconnect();
   }, [headings]);
 
   return (
-    <div className="flex w-full items-start gap-8">
-      <aside className="sticky top-0 w-52 shrink-0">
-        <div className="mb-2 flex items-center justify-between">
+    <div className="flex h-full min-h-0 w-full items-stretch gap-8">
+      <aside className="flex w-52 shrink-0 flex-col">
+        <div className="mb-2 flex shrink-0 items-center justify-between">
           <span className="text-xs text-fg-muted">大纲</span>
           <div className="flex items-center gap-1.5">
             <span
@@ -99,14 +101,14 @@ export function ChangelogPage({ source }: { source: string }) {
             拉取失败，显示内置版本
           </p>
         )}
-        <div className="flex max-h-[60vh] flex-col gap-0.5 overflow-y-auto">
+        <div className="thin-scrollbar flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pr-1">
           {headings.map((h, i) => (
             <button
               key={i}
               onClick={() => jumpTo(i)}
               title={h.text}
               className={cn(
-                "truncate rounded-md py-1 pr-2 text-left text-[13px] transition-colors",
+                "shrink-0 truncate rounded-md py-1 pr-2 text-left text-[13px] transition-colors",
                 i === active
                   ? "bg-accent/10 text-accent"
                   : "text-fg-muted hover:bg-hover hover:text-fg",
@@ -118,7 +120,7 @@ export function ChangelogPage({ source }: { source: string }) {
           ))}
         </div>
       </aside>
-      <div className="min-w-0 flex-1">
+      <div ref={contentRef} className="thin-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto pb-6 pr-2">
         <Markdown source={md} headingId={headingId} />
       </div>
     </div>
