@@ -80,6 +80,8 @@ export interface TimelineFileMeta {
   order: number;
   /** 所属分卷 id；缺省表示未分卷（顶层） */
   folderId?: string;
+  /** 该文件的显示方向（horizontal / vertical）；缺省 = 用设置里的默认方向 */
+  orientation?: "horizontal" | "vertical";
 }
 
 export interface TimelineFolderMeta {
@@ -147,7 +149,10 @@ export interface LoreFileMeta {
   id: string;
   title: string;
   order: number;
+  /** 所属分卷 id；缺省表示未分卷（顶层） */
   folderId?: string;
+  /** 该文件的视图布局（graph / grid）；缺省 = 用设置里的默认视图 */
+  layout?: "graph" | "grid";
 }
 
 export interface LoreFolderMeta {

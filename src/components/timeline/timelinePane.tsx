@@ -34,7 +34,7 @@ import { useInstanceId, useTimelineDoc, useTimelineSlice } from "@/components/ed
 import { registerFitHandler, registerUndoHandler, registerRedoHandler } from "@/lib/timelineBus";
 import { registerTimelineIo } from "@/lib/timelineBus";
 import { commandMatches, keybindingRegistry } from "@/lib/keybindings";
-import { resolveSetting } from "@/stores/settingsStore";
+import { resolveSetting, useSettingsStore } from "@/stores/settingsStore";
 import { TIMELINE_PROTOTYPE } from "@/stores/pluginStore";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile, writeBinaryFile } from "@/lib/tauri";
@@ -346,6 +346,17 @@ function TimelineCanvas({
   }, [fileId]);
 
   const { rangeStart, rangeEnd, tickStep, nodes } = doc;
+
+  // —— 显示方向：记录在文件本身（无记录时用设置里的默认方向）；竖向时时间轴沿 y、标签文字仍横排 ——
+  useSettingsStore();
+  const tlFiles = useTimelineStore((s) => s.slices[instanceId]?.files ?? []);
+  const fileOrientation = tlFiles.find((f) => f.id === fileId)?.orientation;
+  const defaultOrientation = resolveSetting(TIMELINE_PROTOTYPE, instanceId, "orientation");
+  const vertical = (fileOrientation ?? defaultOrientation) === "vertical";
+  /** 数据坐标（x = 时间px，y = 偏移）→ 画布坐标（竖向转置） */
+  const toCanvas = (x: number, y: number) => (vertical ? { x: y, y: x } : { x, y });
+  /** 画布坐标 → 数据坐标 */
+  const toData = (cx: number, cy: number) => (vertical ? { x: cy, y: cx } : { x: cx, y: cy });
   const isNodeHidden = useCallback(
     (n: TimelineNodeData) => colorLegend.some((l) => l.color === n.color && l.hidden),
     [colorLegend],
@@ -410,17 +421,28 @@ function TimelineCanvas({
     const el = viewportRef.current;
     if (!el) return null;
     const d = dataRef.current;
-    let x0 = d.rangeStart * TIME_SCALE;
-    let x1 = d.rangeEnd * TIME_SCALE;
-    let y0 = 0;
-    let y1 = 0;
+    // 竖向时时间轴沿 y：轴体跨度落在 y 上，偏移落在 x 上
+    let x0: number, x1: number, y0: number, y1: number;
+    if (vertical) {
+      x0 = 0;
+      x1 = 0;
+      y0 = d.rangeStart * TIME_SCALE;
+      y1 = d.rangeEnd * TIME_SCALE;
+    } else {
+      x0 = d.rangeStart * TIME_SCALE;
+      x1 = d.rangeEnd * TIME_SCALE;
+      y0 = 0;
+      y1 = 0;
+    }
     for (const n of d.nodes) {
       const w = sizesRef.current[n.id]?.w ?? 90;
       const h = sizesRef.current[n.id]?.h ?? 34;
-      x0 = Math.min(x0, n.x - w / 2);
-      x1 = Math.max(x1, n.x + w / 2);
-      y0 = Math.min(y0, n.y - h / 2);
-      y1 = Math.max(y1, n.y + h / 2);
+      const px = vertical ? n.y : n.x;
+      const py = vertical ? n.x : n.y;
+      x0 = Math.min(x0, px - w / 2);
+      x1 = Math.max(x1, px + w / 2);
+      y0 = Math.min(y0, py - h / 2);
+      y1 = Math.max(y1, py + h / 2);
     }
     const pad = 80;
     const bw = Math.max(x1 - x0, 1);
@@ -435,7 +457,7 @@ function TimelineCanvas({
       y: el.clientHeight / 2 - (zoom * (y0 + y1)) / 2,
       zoom,
     };
-  }, []);
+  }, [vertical]);
 
   const fit = useCallback(() => {
     const v = computeFitView();
@@ -612,7 +634,14 @@ function TimelineCanvas({
         } else if (d.nodeId) {
           const z = viewRef.current.zoom;
           for (const [gid, start] of d.startWorld) {
-            moveNode(instanceId, fileIdRef.current, gid, start.x + dx / z, start.y + dy / z);
+            // 竖向：屏幕 dx 对应偏移、dy 对应时间
+            moveNode(
+              instanceId,
+              fileIdRef.current,
+              gid,
+              start.x + (vertical ? dy : dx) / z,
+              start.y + (vertical ? dx : dy) / z,
+            );
           }
         }
         return;
@@ -648,8 +677,10 @@ function TimelineCanvas({
         marqueeRef.current = null;
         setMarquee(null);
         if (m.moved) {
-          const w0 = clientToWorld(m.x0, m.y0);
-          const w1 = clientToWorld(e.clientX, e.clientY);
+          const c0 = clientToWorld(m.x0, m.y0);
+          const c1 = clientToWorld(e.clientX, e.clientY);
+          const w0 = toData(c0.x, c0.y);
+          const w1 = toData(c1.x, c1.y);
           const minX = Math.min(w0.x, w1.x);
           const maxX = Math.max(w0.x, w1.x);
           const minY = Math.min(w0.y, w1.y);
@@ -671,7 +702,7 @@ function TimelineCanvas({
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
-  }, [moveNode, instanceId]);
+  }, [moveNode, instanceId, vertical]);
 
   // —— Esc 取消一切手势/菜单 ——
   useEffect(() => {
@@ -778,7 +809,8 @@ function TimelineCanvas({
     commitLabel();
     // 新建标签：创建前入栈快照（命名提交/空白删除与创建同属一步撤销，见 commitLabel）
     record(instanceId);
-    const created = addNode(instanceId, fileId, wx, wy, currentColorRef.current);
+    const dpos = toData(wx, wy);
+    const created = addNode(instanceId, fileId, dpos.x, dpos.y, currentColorRef.current);
     if (created) {
       startEdit(created.id, "");
       creationRef.current = created.id;
@@ -845,14 +877,19 @@ function TimelineCanvas({
   // —— 刻度：可见范围 + 自动加大步长 ——
   const wx0 = (0 - view.x) / view.zoom;
   const wx1 = (vw - view.x) / view.zoom;
+  const wy0 = (0 - view.y) / view.zoom;
+  const wy1 = (vh - view.y) / view.zoom;
+  // 竖向时时间沿 y：可见范围取视口高度换算的区间
+  const visLo = vertical ? wy0 : wx0;
+  const visHi = vertical ? wy1 : wx1;
   let step = Math.max(tickStep, 1e-6);
   let guard = 0;
   while (step * TIME_SCALE * view.zoom < TICK_MIN_PX && guard++ < 64) step *= 2;
   const firstTick = Math.ceil(rangeStart / step) * step;
   const ticks: number[] = [];
   for (let t = firstTick; t <= rangeEnd + 1e-9; t += step) {
-    const wx = t * TIME_SCALE;
-    if (wx < wx0 - 40 || wx > wx1 + 40) continue;
+    const wt = t * TIME_SCALE;
+    if (wt < visLo - 40 || wt > visHi + 40) continue;
     ticks.push(t);
   }
 
@@ -898,43 +935,158 @@ function TimelineCanvas({
             transformOrigin: "0 0",
           }}
         >
-          {/* 轴体 */}
-          <div className="pointer-events-none absolute h-[2px] bg-accent" style={{ left: axisX0, width: axisX1 - axisX0, top: -1 }} />
-          <div className="pointer-events-none absolute size-2 rounded-full bg-accent" style={{ left: axisX0 - 4, top: -5 }} />
-          <div
-            className="pointer-events-none absolute border-y-[5px] border-l-[9px] border-y-transparent border-l-accent"
-            style={{ left: axisX1 - 1, top: -5 }}
-          />
+          {/* 轴体：起点端渐隐、整体轻发光（横向沿 x，竖向沿 y；竖向时文字仍横排） */}
+          {vertical ? (
+            <>
+              <div
+                className="pointer-events-none absolute w-[2px] rounded-full"
+                style={{
+                  top: axisX0,
+                  height: axisX1 - axisX0,
+                  left: -1,
+                  background:
+                    "linear-gradient(180deg, transparent 0, var(--color-accent) 46px, var(--color-accent) 100%)",
+                  boxShadow: "0 0 7px color-mix(in srgb, var(--color-accent) 32%, transparent)",
+                }}
+              />
+              {/* 起点（上端）：实心点 + 淡环 */}
+              <div
+                className="pointer-events-none absolute rounded-full"
+                style={{
+                  left: -6.5,
+                  top: axisX0 - 6.5,
+                  width: 13,
+                  height: 13,
+                  border: "1.5px solid color-mix(in srgb, var(--color-accent) 34%, transparent)",
+                }}
+              />
+              <div
+                className="pointer-events-none absolute rounded-full bg-accent"
+                style={{ left: -3.5, top: axisX0 - 3.5, width: 7, height: 7 }}
+              />
+              {/* 终点（下端）：向下箭头 + 柔光 */}
+              <div
+                className="pointer-events-none absolute border-x-[5px] border-t-[9px] border-x-transparent border-t-accent"
+                style={{
+                  left: -5,
+                  top: axisX1 - 1,
+                  filter:
+                    "drop-shadow(0 0 4px color-mix(in srgb, var(--color-accent) 45%, transparent))",
+                }}
+              />
+            </>
+          ) : (
+            <>
+              <div
+                className="pointer-events-none absolute h-[2px] rounded-full"
+                style={{
+                  left: axisX0,
+                  width: axisX1 - axisX0,
+                  top: -1,
+                  background:
+                    "linear-gradient(90deg, transparent 0, var(--color-accent) 46px, var(--color-accent) 100%)",
+                  boxShadow: "0 0 7px color-mix(in srgb, var(--color-accent) 32%, transparent)",
+                }}
+              />
+              <div
+                className="pointer-events-none absolute rounded-full"
+                style={{
+                  left: axisX0 - 6.5,
+                  top: -6.5,
+                  width: 13,
+                  height: 13,
+                  border: "1.5px solid color-mix(in srgb, var(--color-accent) 34%, transparent)",
+                }}
+              />
+              <div
+                className="pointer-events-none absolute rounded-full bg-accent"
+                style={{ left: axisX0 - 3.5, top: -3.5, width: 7, height: 7 }}
+              />
+              <div
+                className="pointer-events-none absolute border-y-[5px] border-l-[9px] border-y-transparent border-l-accent"
+                style={{
+                  left: axisX1 - 1,
+                  top: -5,
+                  filter:
+                    "drop-shadow(0 0 4px color-mix(in srgb, var(--color-accent) 45%, transparent))",
+                }}
+              />
+            </>
+          )}
 
           {/* 垂线 + 轴上节点 + 刻度短线 */}
           <svg className="pointer-events-none absolute left-0 top-0 h-1 w-1 overflow-visible">
             {visibleNodes.map((n) => {
               const size = sizesRef.current[n.id];
+              const w = size?.w ?? 90;
               const h = size?.h ?? 34;
-              const above = n.y < 0;
-              const edgeY = above ? n.y + h / 2 : n.y - h / 2;
+              const p = toCanvas(n.x, n.y);
+              // 竖向：连到轴体（x = 0）用标签的左右边；横向：连到轴体（y = 0）用上下边
+              const edgeX = p.x < 0 ? p.x + w / 2 : p.x - w / 2;
+              const edgeY = p.y < 0 ? p.y + h / 2 : p.y - h / 2;
               return (
                 <g key={n.id}>
-                  <line x1={n.x} y1={edgeY} x2={n.x} y2={0} stroke={n.color} strokeWidth={1.5} opacity={0.65} />
-                  <circle cx={n.x} cy={0} r={2.5} fill={n.color} />
+                  {/* 垂线：更细更淡，让轴体与标签更突出 */}
+                  <line
+                    x1={vertical ? edgeX : p.x}
+                    y1={vertical ? p.y : edgeY}
+                    x2={vertical ? 0 : p.x}
+                    y2={vertical ? p.y : 0}
+                    stroke={n.color}
+                    strokeWidth={1.25}
+                    strokeLinecap="round"
+                    opacity={0.5}
+                  />
+                  {/* 轴上锚点：纸色描边，交点更清晰 */}
+                  <circle
+                    cx={vertical ? 0 : p.x}
+                    cy={vertical ? p.y : 0}
+                    r={2.2}
+                    fill={n.color}
+                    stroke="var(--color-editor-bg)"
+                    strokeWidth={1.2}
+                  />
                 </g>
               );
             })}
-            {ticks.map((t) => (
-              <line key={t} x1={t * TIME_SCALE} y1={0} x2={t * TIME_SCALE} y2={6} stroke="var(--color-fg-muted)" strokeWidth={1} opacity={0.6} />
-            ))}
+            {/* 刻度：每 5 格为主刻度（更长更亮），其余为次刻度 */}
+            {ticks.map((t) => {
+              const k = Math.round(t / step);
+              const major = k % 5 === 0;
+              return (
+                <line
+                  key={t}
+                  x1={vertical ? 0 : t * TIME_SCALE}
+                  y1={vertical ? t * TIME_SCALE : 0}
+                  x2={vertical ? -(major ? 9 : 5) : t * TIME_SCALE}
+                  y2={vertical ? t * TIME_SCALE : major ? 9 : 5}
+                  stroke="var(--color-fg-muted)"
+                  strokeWidth={major ? 1.1 : 1}
+                  strokeLinecap="round"
+                  opacity={major ? 0.72 : 0.34}
+                />
+              );
+            })}
           </svg>
 
-          {/* 刻度数字 */}
-          {ticks.map((t) => (
-            <div
-              key={t}
-              className="pointer-events-none absolute -translate-x-1/2 font-mono text-[11px] tabular-nums text-fg-muted"
-              style={{ left: t * TIME_SCALE, top: 9 }}
-            >
-              {formatNum(t)}
-            </div>
-          ))}
+          {/* 刻度数字：刻度较密时只标注主刻度，避免拥挤 */}
+          {ticks.map((t) => {
+            const major = Math.round(t / step) % 5 === 0;
+            if (ticks.length > 14 && !major) return null;
+            return (
+              <div
+                key={t}
+                className={cn(
+                  "pointer-events-none absolute font-mono text-[11px] tabular-nums",
+                  vertical ? "-translate-x-full -translate-y-1/2 text-right" : "-translate-x-1/2",
+                  major ? "text-fg-muted" : "text-fg-muted/70",
+                )}
+                style={vertical ? { left: -14, top: t * TIME_SCALE } : { left: t * TIME_SCALE, top: 9 }}
+              >
+                {formatNum(t)}
+              </div>
+            );
+          })}
 
           {/* 标签（透明背景/轮廓，文字用所选颜色；选中/框选/编辑时就地输入） */}
           {visibleNodes.map((n) => {
@@ -962,8 +1114,8 @@ function TimelineCanvas({
                   setEditingDraft(n.label);
                 }}
                 style={{
-                  left: n.x - w / 2,
-                  top: n.y - h / 2,
+                  left: toCanvas(n.x, n.y).x - w / 2,
+                  top: toCanvas(n.x, n.y).y - h / 2,
                   color: n.color,
                   outline: (isSel || isBox) && !isEditing ? `1px dashed ${isSel ? n.color : "var(--color-accent)"}` : undefined,
                   outlineOffset: 2,

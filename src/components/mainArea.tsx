@@ -201,8 +201,13 @@ export function MainArea() {
               edgeLabelColor: loreEdgeLabelColorResolved,
               onSetEdgeColor: (c) => setLoreEdgeColor(active.instanceId, c),
               onSetEdgeLabelColor: (c) => setLoreEdgeLabelColor(active.instanceId, c),
-              onToggleLayout: () =>
-                setLoreLayout(active.instanceId, loreLayout === "graph" ? "grid" : "graph"),
+              onToggleLayout: () => {
+                const next = loreLayout === "graph" ? "grid" : "graph";
+                setLoreLayout(active.instanceId, next);
+                // 视图记录在文件本身（随 lore.json 落盘）
+                const fid = useLoreStore.getState().getSlice(active.instanceId).currentFileId;
+                if (fid) useLoreStore.getState().setFileLayout(active.instanceId, fid, next);
+              },
               openPanelId: tagOpen ? "tags" : null,
               openPanel: (panel) => {
                 if (panel === "tags") setTagOpen((v) => !v);

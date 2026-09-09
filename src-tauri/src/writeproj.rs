@@ -206,6 +206,9 @@ pub struct LoreFileMeta {
     pub order: u32,
     #[serde(default)]
     pub folder_id: Option<String>,
+    /// 该文件的视图布局（graph / grid）；缺省 = 用默认视图
+    #[serde(default)]
+    pub layout: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -259,6 +262,9 @@ pub struct TimelineFileMeta {
     pub order: u32,
     #[serde(default)]
     pub folder_id: Option<String>,
+    /// 该文件的显示方向（horizontal / vertical）；缺省 = 用默认方向
+    #[serde(default)]
+    pub orientation: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -475,6 +481,7 @@ pub fn read_project_file(path: &Path) -> Result<ProjectData, String> {
                 title: "时间轴".to_string(),
                 order: 0,
                 folder_id: None,
+                orientation: None,
             });
             let mut docs: HashMap<String, TimelineData> = HashMap::new();
             docs.insert(file_id.clone(), legacy);
@@ -520,6 +527,7 @@ pub fn read_project_file(path: &Path) -> Result<ProjectData, String> {
             title: "设定库".to_string(),
             order: 0,
             folder_id: None,
+            layout: None,
         });
         let mut docs: HashMap<String, LoreData> = HashMap::new();
         docs.insert(

@@ -22,7 +22,7 @@ import { captureLoreGraph } from "@/lib/loreBus";
 import { registerLoreIo } from "@/lib/loreBus";
 import { requestLoreRedo, requestLoreUndo } from "@/lib/loreBus";
 import { commandMatches, keybindingRegistry } from "@/lib/keybindings";
-import { resolveSetting } from "@/stores/settingsStore";
+import { resolveSetting, useSettingsStore } from "@/stores/settingsStore";
 import { LORE_PROTOTYPE } from "@/stores/loreStore";
 import { notifyError, notifyInfo, notifySuccess } from "@/lib/notify";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -40,6 +40,8 @@ export function LorePane() {
   const tags = slice.tags;
   // 视图状态缺省回退 graph（未初始化时保证展示与工具栏切换严格一致）
   const view = useLoreUiStore((s) => s.slices[instanceId]?.view) ?? EMPTY_LORE_UI_SLICE.view;
+  /** 订阅实例设置：默认视图变化时，对尚未记录视图的文件即时生效 */
+  const instanceSettings = useSettingsStore((s) => s.instanceSettings);
   const setQuery = useLoreUiStore((s) => s.setQuery);
   const toggleTagFilter = useLoreUiStore((s) => s.toggleTagFilter);
   const clearTagFilter = useLoreUiStore((s) => s.clearTagFilter);
@@ -294,7 +296,11 @@ export function LorePane() {
         e.preventDefault();
         const st = useLoreUiStore.getState();
         const cur = st.slices[instanceId]?.view.layout ?? "graph";
-        st.setLayout(instanceId, cur === "graph" ? "grid" : "graph");
+        const next = cur === "graph" ? "grid" : "graph";
+        st.setLayout(instanceId, next);
+        // 视图记录在文件本身（随 lore.json 落盘）
+        const fid = useLoreStore.getState().getSlice(instanceId).currentFileId;
+        if (fid) useLoreStore.getState().setFileLayout(instanceId, fid, next);
         return;
       }
     };
@@ -302,11 +308,16 @@ export function LorePane() {
     return () => window.removeEventListener("keydown", onKey);
   }, [instanceId]);
 
-  // —— 默认视图（设置项）：进入视图时应用 ——
+  // —— 视图记录在文件本身：切文件/新建时优先取该文件的 layout，无记录才用默认视图 ——
   useEffect(() => {
-    const d = resolveSetting(LORE_PROTOTYPE, instanceId, "defaultView");
-    useLoreUiStore.getState().setLayout(instanceId, d === "grid" ? "grid" : "graph");
-  }, [instanceId]);
+    if (!fileId) return;
+    const saved = slice.files.find((f) => f.id === fileId)?.layout;
+    const def = resolveSetting(LORE_PROTOTYPE, instanceId, "defaultView");
+    const layout = saved === "grid" || saved === "graph" ? saved : def === "grid" ? "grid" : "graph";
+    if (useLoreUiStore.getState().getSlice(instanceId).view.layout !== layout) {
+      useLoreUiStore.getState().setLayout(instanceId, layout);
+    }
+  }, [instanceId, fileId, instanceSettings]);
 
   return (
     <div className="flex h-full flex-col">

@@ -2,7 +2,22 @@
 // 撤销/重做、图例显隐、颜色管理（含当前使用颜色指示）由宿主 MainArea 按注册渲染。
 // 与主文件解耦：新增/调整工具项只改本文件。
 
-import { Download, FileDown, FileImage, FileUp, Layers, Link2, Palette, Redo2, Undo2 } from "lucide-react";
+import {
+  ArrowLeftRight,
+  ArrowUpDown,
+  Download,
+  FileDown,
+  FileImage,
+  FileUp,
+  Layers,
+  Link2,
+  Palette,
+  Redo2,
+  Undo2,
+} from "lucide-react";
+import { resolveSetting, useSettingsStore } from "@/stores/settingsStore";
+import { TIMELINE_PROTOTYPE } from "@/stores/pluginStore";
+import { useTimelineStore } from "@/stores/timelineStore";
 import { requestTimelineIo } from "@/lib/timelineBus";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { PluginContext, ViewToolbarContext } from "@/types/plugin";
@@ -11,6 +26,30 @@ import { cn } from "@/lib/cn";
 import { useTimelineUiStore } from "@/stores/timelineUiStore";
 import { ToolbarGuideButton } from "@/components/ui/quickGuide";
 import { timelineGuide } from "./guideData";
+
+/** 横竖显示切换按钮（独立组件，避免在渲染回调中调用 Hook） */
+function OrientationToggle({ instanceId }: { instanceId: string }) {
+  useSettingsStore();
+  const fileId = useTimelineStore((s) => s.slices[instanceId]?.currentFileId ?? null);
+  const fileOrientation = useTimelineStore(
+    (s) => s.slices[instanceId]?.files.find((f) => f.id === fileId)?.orientation,
+  );
+  const fallback = resolveSetting(TIMELINE_PROTOTYPE, instanceId, "orientation");
+  const vertical = (fileOrientation ?? fallback) === "vertical";
+  return (
+    <button
+      title={vertical ? "切换为横向显示" : "切换为竖向显示"}
+      onClick={() => {
+        const next = vertical ? "horizontal" : "vertical";
+        // 视图记录在文件本身（随 timelines.json 落盘）
+        if (fileId) useTimelineStore.getState().setFileOrientation(instanceId, fileId, next);
+      }}
+      className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-all duration-150 hover:bg-hover hover:text-fg active:scale-95"
+    >
+      {vertical ? <ArrowLeftRight className="size-4" /> : <ArrowUpDown className="size-4" />}
+    </button>
+  );
+}
 
 /** 注册时间轴视图工具栏全部条目 */
 export function registerTimelineToolbar(ctx: PluginContext): void {
@@ -87,6 +126,13 @@ export function registerTimelineToolbar(ctx: PluginContext): void {
     ),
   });
 
+  // 横竖显示切换（默认横向；可在插件配置里改默认值）
+  ctx.registerContribution("timeline.toolbar", {
+    id: "orientation",
+    title: "横向 / 竖向显示切换",
+    groupId: "toolbarOrientation",
+    render: (tctx: ViewToolbarContext) => <OrientationToggle instanceId={tctx.instanceId} />,
+  });
   ctx.registerContribution("timeline.toolbar", {
     id: "io",
     title: "导入 / 导出",

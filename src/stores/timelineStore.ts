@@ -100,6 +100,8 @@ interface TimelineState {
   deleteFolderWithContents: (instanceId: string, id: string) => void;
   addFile: (instanceId: string, title: string, folderId?: string) => TimelineFileMeta;
   renameFile: (instanceId: string, id: string, title: string) => void;
+  /** 记录某文件的显示方向（随文件落盘；缺省 = 用默认方向） */
+  setFileOrientation: (instanceId: string, fileId: string, orientation: "horizontal" | "vertical") => void;
   deleteFile: (instanceId: string, id: string) => void;
   /** 整文件替换轴体数据（v0.7 导入 .timeline 用） */
   setFileDoc: (instanceId: string, fileId: string, data: TimelineData) => void;
@@ -344,6 +346,19 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
         [instanceId]: {
           ...cur,
           files: cur.files.map((f) => (f.id === id ? { ...f, title } : f)),
+        },
+      },
+    });
+  },
+
+  setFileOrientation: (instanceId, fileId, orientation) => {
+    const cur = get().slices[instanceId] ?? EMPTY_TIMELINE_SLICE;
+    set({
+      slices: {
+        ...get().slices,
+        [instanceId]: {
+          ...cur,
+          files: cur.files.map((f) => (f.id === fileId ? { ...f, orientation } : f)),
         },
       },
     });

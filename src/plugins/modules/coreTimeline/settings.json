@@ -12,9 +12,19 @@
     "instanceOverridable": true
   },
   "legendDefault": {
-    "label": "图例默认状态",
+    "label": "默认图例显示状态",
     "type": "boolean",
     "default": true,
+    "instanceOverridable": true
+  },
+  "orientation": {
+    "label": "默认显示方向",
+    "type": "select",
+    "default": "horizontal",
+    "options": [
+      { "label": "横向", "value": "horizontal" },
+      { "label": "竖向", "value": "vertical" }
+    ],
     "instanceOverridable": true
   },
   "defaultRangeStart": {
@@ -82,6 +92,12 @@
   },
   "toolbarIO": {
     "label": "工具栏 · 导入/导出",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarOrientation": {
+    "label": "工具栏 · 横竖切换",
     "type": "boolean",
     "default": true,
     "instanceOverridable": true

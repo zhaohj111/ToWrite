@@ -124,6 +124,8 @@ interface LoreState {
   deleteFolderWithContents: (instanceId: string, id: string) => void;
   addFile: (instanceId: string, title: string, folderId?: string) => LoreFileMeta;
   renameFile: (instanceId: string, id: string, title: string) => void;
+  /** 记录某文件的视图布局（随文件落盘；缺省 = 用默认视图） */
+  setFileLayout: (instanceId: string, fileId: string, layout: "graph" | "grid") => void;
   deleteFile: (instanceId: string, id: string) => void;
   moveFolder: (instanceId: string, id: string, parentId: string | undefined, beforeId: string | null) => void;
   moveFile: (
@@ -357,6 +359,19 @@ export const useLoreStore = create<LoreState>((set, get) => ({
         [instanceId]: {
           ...cur,
           files: cur.files.map((f) => (f.id === id ? { ...f, title } : f)),
+        },
+      },
+    });
+  },
+
+  setFileLayout: (instanceId, fileId, layout) => {
+    const cur = get().slices[instanceId] ?? EMPTY_LORE_SLICE;
+    set({
+      slices: {
+        ...get().slices,
+        [instanceId]: {
+          ...cur,
+          files: cur.files.map((f) => (f.id === fileId ? { ...f, layout } : f)),
         },
       },
     });
