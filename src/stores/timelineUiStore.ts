@@ -5,7 +5,8 @@
 // 打开工程时由 projectStore 读回（restoreProjectColors），关闭工程时 reset 清空。
 
 import { create } from "zustand";
-import { useSettingsStore } from "@/stores/settingsStore";
+import { resolveSetting, useSettingsStore } from "@/stores/settingsStore";
+import { TIMELINE_PROTOTYPE } from "@/stores/pluginStore";
 
 interface TimelineUiState {
   /** 右上角颜色图例是否显示 */
@@ -33,3 +34,21 @@ export const useTimelineUiStore = create<TimelineUiState>((set) => ({
   loadProject: (colors) => set({ currentColors: colors }),
   reset: () => set({ currentColors: {} }),
 }));
+
+// —— 浏览滑动条（时间轴窗口沿轴方向滑动）——
+// 显示开关按工程持久化：实例设置 scrollbarVisible（project-config.json）；
+// 无实例覆盖时回落到设置「默认滑动条显示状态」（scrollbarDefault）。
+const KEY_SCROLLBAR_VISIBLE = "scrollbarVisible";
+
+/** 浏览滑动条当前是否显示（工具栏开关 > 默认值设置） */
+export function resolveTimelineScrollbarVisible(instanceId: string): boolean {
+  const st = useSettingsStore.getState();
+  const override = st.getInstanceSetting(instanceId, KEY_SCROLLBAR_VISIBLE);
+  if (override !== undefined) return override !== false;
+  return resolveSetting(TIMELINE_PROTOTYPE, instanceId, "scrollbarDefault") !== false;
+}
+
+/** 设置浏览滑动条显示状态（工具栏开关写入实例设置，随工程落盘） */
+export function setTimelineScrollbarVisible(instanceId: string, visible: boolean): void {
+  useSettingsStore.getState().setInstanceSetting(instanceId, KEY_SCROLLBAR_VISIBLE, visible);
+}

@@ -9,6 +9,8 @@ import {
   FileDown,
   FileImage,
   FileUp,
+  GalleryHorizontalEnd,
+  GalleryVerticalEnd,
   Layers,
   Link2,
   Palette,
@@ -23,7 +25,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import type { PluginContext, ViewToolbarContext } from "@/types/plugin";
 import { requestTimelineRedo, requestTimelineUndo } from "@/lib/timelineBus";
 import { cn } from "@/lib/cn";
-import { useTimelineUiStore } from "@/stores/timelineUiStore";
+import {
+  resolveTimelineScrollbarVisible,
+  setTimelineScrollbarVisible,
+  useTimelineUiStore,
+} from "@/stores/timelineUiStore";
 import { ToolbarGuideButton } from "@/components/ui/quickGuide";
 import { timelineGuide } from "./guideData";
 
@@ -47,6 +53,30 @@ function OrientationToggle({ instanceId }: { instanceId: string }) {
       className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-all duration-150 hover:bg-hover hover:text-fg active:scale-95"
     >
       {vertical ? <ArrowLeftRight className="size-4" /> : <ArrowUpDown className="size-4" />}
+    </button>
+  );
+}
+
+/** 浏览滑动条显示开关（状态按工程持久化；该工具栏项被禁用时滑动条整体不显示） */
+function ScrollbarToggle({ instanceId }: { instanceId: string }) {
+  useSettingsStore();
+  const fileId = useTimelineStore((s) => s.slices[instanceId]?.currentFileId ?? null);
+  const fileOrientation = useTimelineStore(
+    (s) => s.slices[instanceId]?.files.find((f) => f.id === fileId)?.orientation,
+  );
+  const fallback = resolveSetting(TIMELINE_PROTOTYPE, instanceId, "orientation");
+  const vertical = (fileOrientation ?? fallback) === "vertical";
+  const visible = resolveTimelineScrollbarVisible(instanceId);
+  return (
+    <button
+      title={visible ? "隐藏浏览滑动条" : "显示浏览滑动条"}
+      onClick={() => setTimelineScrollbarVisible(instanceId, !visible)}
+      className={cn(
+        "flex h-7 w-7 items-center justify-center rounded-md transition-all duration-150 active:scale-95",
+        visible ? "bg-accent-soft text-accent" : "text-fg-muted hover:bg-hover hover:text-fg",
+      )}
+    >
+      {vertical ? <GalleryVerticalEnd className="size-4" /> : <GalleryHorizontalEnd className="size-4" />}
     </button>
   );
 }
@@ -92,6 +122,12 @@ export function registerTimelineToolbar(ctx: PluginContext): void {
     isActive: ({ legendVisible }) => legendVisible === true,
     action: () =>
       useTimelineUiStore.getState().setLegendVisible(!useTimelineUiStore.getState().legendVisible),
+  });
+  ctx.registerContribution("timeline.toolbar", {
+    id: "scrollbar",
+    title: "浏览滑动条显示开关",
+    groupId: "toolbarScrollbar",
+    render: (tctx: ViewToolbarContext) => <ScrollbarToggle instanceId={tctx.instanceId} />,
   });
   ctx.registerContribution("timeline.toolbar", {
     id: "assoc",

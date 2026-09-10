@@ -297,6 +297,37 @@ textarea,
   box-shadow: var(--shadow-card), 0 0 0 1px color-mix(in srgb, var(--color-accent) 8%, transparent);
 }
 
+/* 浏览滑动条：轨道无填充但保留内凹阴影 + 滑动柄（纸白扁平、无光效，仅抓握点） */
+.scrollbar-track {
+  background: transparent;
+  /* 轮廓跟随前景色：浅色下是淡墨线，墨夜下是淡白线，两主题都可见 */
+  border-color: color-mix(in srgb, var(--color-fg) 22%, transparent);
+  /* 浅色下用常规阴影色（暖褐，与全站投影同族）做内凹 */
+  box-shadow:
+    inset 0 0 4px rgba(90, 66, 32, 0.18),
+    inset 0 0 0 1px rgba(90, 66, 32, 0.08);
+}
+/* 墨夜下常规黑影看不出，轨道内凹改用朱砂红 */
+.dark .scrollbar-track {
+  box-shadow:
+    inset 0 0 4px color-mix(in srgb, var(--color-accent) 30%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 16%, transparent);
+}
+.scrollbar-thumb {
+  background: var(--color-editor-bg);
+  border-color: color-mix(in srgb, var(--color-fg) 26%, transparent);
+}
+/* 墨夜下柄与底色接近，用朱砂红光晕标识（浅色下保持无光效） */
+.dark .scrollbar-thumb {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+  box-shadow:
+    0 0 6px color-mix(in srgb, var(--color-accent) 50%, transparent),
+    inset 0 0 4px color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+.scrollbar-grip {
+  background: color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+
 /* ================================================================
    动效体系
    ================================================================ */

@@ -28,7 +28,10 @@ import {
   Trash2,X,
 } from "lucide-react";
 import { normalizeDoc, useTimelineStore, DEFAULT_COLOR_LEGEND } from "@/stores/timelineStore";
-import { useTimelineUiStore } from "@/stores/timelineUiStore";
+import {
+  resolveTimelineScrollbarVisible,
+  useTimelineUiStore,
+} from "@/stores/timelineUiStore";
 import { useAssociationStore } from "@/stores/associationStore";
 import { useInstanceId, useTimelineDoc, useTimelineSlice } from "@/components/editor/editorInstanceContext";
 import { registerFitHandler, registerUndoHandler, registerRedoHandler } from "@/lib/timelineBus";
@@ -60,6 +63,10 @@ const DOT_GAP = 22;
 const LEGEND_COL_WIDTH = 104;
 /** 图例最多显示的行数（超出另起一列） */
 const LEGEND_ROWS = 5;
+/** 浏览滑动条：轨道长度上限 = 编辑器区域对应方向的 1/3 */
+const SCROLLBAR_MAX_RATIO = 1 / 3;
+/** 浏览滑动条：滑动柄固定长度（缩放时柄长不变，改由滑动区域长度变化体现） */
+const SCROLLBAR_HANDLE_LEN = 64;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(Math.max(v, lo), hi);
@@ -302,7 +309,9 @@ function TimelineCanvas({
       const el = legendScrollRef.current;
       if (el) el.scrollLeft = d.startLeft - dx;
     };
-    const onUp = () => { legendDragRef.current = null; };
+    const onUp = () => {
+      legendDragRef.current = null;
+    };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     return () => {
@@ -353,6 +362,13 @@ function TimelineCanvas({
   const fileOrientation = tlFiles.find((f) => f.id === fileId)?.orientation;
   const defaultOrientation = resolveSetting(TIMELINE_PROTOTYPE, instanceId, "orientation");
   const vertical = (fileOrientation ?? defaultOrientation) === "vertical";
+  // 图例是否显示 = 图例开关为开 且 工具栏「图例显示」项仍启用（项被关闭时不再残留图例）
+  const legendToolbarEnabled =
+    resolveSetting(TIMELINE_PROTOTYPE, instanceId, "toolbarLegend") !== false;
+  // 浏览滑动条：工具栏项被禁用（设置里关闭）时整体不显示；显示开关按工程持久化
+  const scrollbarToolbarEnabled =
+    resolveSetting(TIMELINE_PROTOTYPE, instanceId, "toolbarScrollbar") !== false;
+  const scrollbarVisible = resolveTimelineScrollbarVisible(instanceId);
   /** 数据坐标（x = 时间px，y = 偏移）→ 画布坐标（竖向转置） */
   const toCanvas = (x: number, y: number) => (vertical ? { x: y, y: x } : { x, y });
   /** 画布坐标 → 数据坐标 */
@@ -392,6 +408,13 @@ function TimelineCanvas({
     recorded?: boolean;
   } | null>(null);
   const marqueeRef = useRef<{ x0: number; y0: number; moved: boolean } | null>(null);
+  /** 浏览滑动条几何（拖动中经 ref 读取最新值，避免重挂监听） */
+  const scrollbarGeomRef = useRef({ travel: 0, span: 0, contentStart: 0, contentEnd: 0, viewSpan: 0 });
+  const scrollbarDragRef = useRef<{
+    startClient: number;
+    startViewX: number;
+    startViewY: number;
+  } | null>(null);
 
   // —— 视口尺寸 ——
   useEffect(() => {
@@ -501,6 +524,50 @@ function TimelineCanvas({
     }, [instanceId]);
   useEffect(() => registerUndoHandler(instanceId, undo), [instanceId, undo]);
   useEffect(() => registerRedoHandler(instanceId, redo), [instanceId, redo]);
+
+  // —— 浏览滑动条：拖动滑动柄沿轴方向滑动当前窗口 ——
+  // 柄的行程 ↔ 可见范围在时间轴内容中的位置：柄在一端时窗口边缘正好对应内容起点/终点。
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const d = scrollbarDragRef.current;
+      if (!d) return;
+      const g = scrollbarGeomRef.current;
+      if (g.travel <= 0 || g.span <= 0) return;
+      const delta = (vertical ? e.clientY : e.clientX) - d.startClient;
+      const dWorld = (delta / g.travel) * g.span;
+      const z = viewRef.current.zoom;
+      // 只按拖动位移平移（“在原位置移动窗口”），不按指针绝对位置跳转；
+      // 目标位置始终限制在内容范围内：窗口原本在范围外时只按位移逐步回收，且到另一端即停，
+      // 不会因为“按下时已在范围外”而可以无限拖出去。
+      const lo = g.contentStart;
+      const hi = Math.max(lo, g.contentEnd - g.viewSpan);
+      const start = (vertical ? -d.startViewY : -d.startViewX) / z;
+      const raw = start + dWorld;
+      const target =
+        start > hi
+          ? Math.max(lo, Math.min(raw, start))
+          : start < lo
+            ? Math.min(hi, Math.max(raw, start))
+            : clamp(raw, lo, hi);
+      const shift = target - start;
+      setView(
+        vertical
+          ? { x: d.startViewX, y: d.startViewY - shift * z, zoom: z }
+          : { x: d.startViewX - shift * z, y: d.startViewY, zoom: z },
+      );
+    };
+    const onUp = () => {
+      scrollbarDragRef.current = null;
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [vertical]);
 
   // —— 键盘快捷键（配置页可改绑；输入框内由输入框自身处理）——
   useEffect(() => {
@@ -901,6 +968,38 @@ function TimelineCanvas({
     axisX1 = Math.max(axisX1, n.x + 120);
   }
 
+  // —— 浏览滑动条几何 ——
+  // 滑动区域（轨道）长度随缩放变化：∝ 时间轴内容长度 / 窗口覆盖长度，最长 = 编辑器区域对应方向的 1/3；
+  // 滑动柄长度固定（缩放时不变）；
+  // 柄滑到一端时窗口边缘正好对应内容起点/终点；内容短于窗口时轨道收缩到仅容纳柄（不可滑动）。
+  const scrollbarMaxLen = (vertical ? vh : vw) * SCROLLBAR_MAX_RATIO;
+  const scrollbarViewSpan = (vertical ? vh : vw) / view.zoom;
+  const scrollbarContentSpan = axisX1 - axisX0;
+  const scrollbarScrollable = scrollbarContentSpan > scrollbarViewSpan + 0.5;
+  const scrollbarHandleLen = Math.min(SCROLLBAR_HANDLE_LEN, scrollbarMaxLen);
+  const scrollbarTrackLen = scrollbarScrollable
+    ? Math.min(scrollbarMaxLen, (scrollbarHandleLen * scrollbarContentSpan) / scrollbarViewSpan)
+    : scrollbarHandleLen;
+  const scrollbarBoxLen = scrollbarTrackLen;
+  const scrollbarTravel = scrollbarScrollable
+    ? Math.max(0, scrollbarTrackLen - scrollbarHandleLen)
+    : 0;
+  const scrollbarHandleOffset =
+    scrollbarScrollable && scrollbarTravel > 0
+      ? clamp(
+          ((vertical ? wy0 : wx0) - axisX0) / Math.max(1e-6, scrollbarContentSpan - scrollbarViewSpan),
+          0,
+          1,
+        ) * scrollbarTravel
+      : 0;
+  scrollbarGeomRef.current = {
+    travel: scrollbarTravel,
+    span: scrollbarScrollable ? scrollbarContentSpan - scrollbarViewSpan : 0,
+    contentStart: axisX0,
+    contentEnd: axisX1,
+    viewSpan: scrollbarViewSpan,
+  };
+
     // —— 右上角图例：只显示当前文件使用到的颜色 ——
     const shownLegend = colorLegend.filter((l) => nodes.some((n) => n.color === l.color));
     const hiddenLegendCount = 0;
@@ -1227,8 +1326,66 @@ function TimelineCanvas({
           </button>
         </div>
 
+        {/* 浏览滑动条：横向显示在编辑器区域底部、竖向显示在左侧；拖动滑动柄沿时间轴方向滑动当前窗口 */}
+        {scrollbarVisible && scrollbarToolbarEnabled && (
+          <div
+            data-overlay
+            onPointerDown={(e) => e.stopPropagation()}
+            className={cn(
+              "absolute z-10 select-none",
+              vertical ? "left-3 top-1/2 -translate-y-1/2" : "bottom-3 left-1/2 -translate-x-1/2",
+            )}
+            style={vertical ? { height: scrollbarBoxLen } : { width: scrollbarBoxLen }}
+          >
+            {scrollbarScrollable && (
+              <div
+                className={cn(
+                  "scrollbar-track absolute rounded-full border",
+                  vertical
+                    ? "left-1/2 top-0 h-full w-5 -translate-x-1/2"
+                    : "left-0 top-1/2 h-5 w-full -translate-y-1/2",
+                )}
+              />
+            )}
+            <div
+              title={scrollbarScrollable ? "拖动浏览时间轴" : "时间轴内容已全部显示"}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                scrollbarDragRef.current = {
+                  startClient: vertical ? e.clientY : e.clientX,
+                  startViewX: view.x,
+                  startViewY: view.y,
+                };
+              }}
+              className={cn(
+                "scrollbar-thumb absolute rounded-full border",
+                vertical ? "left-1/2 w-5 -translate-x-1/2" : "top-1/2 h-5 -translate-y-1/2",
+                scrollbarScrollable ? "cursor-grab active:cursor-grabbing" : "cursor-default",
+              )}
+              style={
+                vertical
+                  ? { top: scrollbarHandleOffset, height: scrollbarHandleLen }
+                  : { left: scrollbarHandleOffset, width: scrollbarHandleLen }
+              }
+            >
+              {/* 抓握点：提示可拖动 */}
+              <span
+                className={cn(
+                  "pointer-events-none absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 gap-[3px]",
+                  vertical ? "flex-col" : "flex-row",
+                )}
+              >
+                {[0, 1, 2].map((i) => (
+                  <span key={i} className="scrollbar-grip size-[2px] rounded-full" />
+                ))}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* 右上角：颜色图例（竖向优先，每列 5 行、多余另起一列；列数超出面板宽度可按住横向拖动浏览） */}
-        {legendVisible && (
+        {legendVisible && legendToolbarEnabled && (
           <div data-overlay className="absolute right-3 top-3 z-10 max-w-[420px]">
             <div className="rounded-xl border border-line/70 bg-app/75 p-3 text-xs shadow-pop backdrop-blur-sm">
               <div className="mb-2 flex items-center gap-2 font-semibold tracking-wide text-fg">

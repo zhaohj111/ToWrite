@@ -17,6 +17,12 @@
     "default": true,
     "instanceOverridable": true
   },
+  "scrollbarDefault": {
+    "label": "默认滑动条显示状态",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
   "orientation": {
     "label": "默认显示方向",
     "type": "select",
@@ -74,6 +80,12 @@
   },
   "toolbarLegend": {
     "label": "工具栏 · 图例显示",
+    "type": "boolean",
+    "default": true,
+    "instanceOverridable": true
+  },
+  "toolbarScrollbar": {
+    "label": "工具栏 · 浏览滑动条",
     "type": "boolean",
     "default": true,
     "instanceOverridable": true
