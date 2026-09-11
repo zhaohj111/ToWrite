@@ -23,6 +23,7 @@ Thumbs.db
 .claude/
 .agents/
 skills-lock.yaml
+skills-lock.json
 
 # MD
 ToWrite.md
