@@ -75,7 +75,11 @@ function collect(): ProjectData | null {
 
 async function flush() {
   timer = null;
-  if (busy) return; // 上次落盘未完成：跳过本轮，下一次变更会重新调度
+  if (busy) {
+    // 上次落盘未完成：改期重试，避免这次改动被直接丢掉
+    schedule();
+    return;
+  }
   const data = collect();
   if (!data) return;
   busy = true;
@@ -92,6 +96,18 @@ async function flush() {
 function schedule() {
   if (timer) clearTimeout(timer);
   timer = setTimeout(flush, DEBOUNCE_MS);
+}
+
+/**
+ * 立即落盘（关闭工程 / 切换工程前调用）：清掉待执行的防抖计时并立刻采集当前状态，
+ * 避免「改完立刻关工程」落在防抖窗口内被丢掉。
+ */
+export function flushSaveNow(): void {
+  if (timer) {
+    clearTimeout(timer);
+    timer = null;
+  }
+  void flush();
 }
 
 /** 启动持久化订阅；打开工程后由 App 初始化一次。 */

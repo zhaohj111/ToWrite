@@ -26,9 +26,10 @@ import type { PluginContext, ViewToolbarContext } from "@/types/plugin";
 import { requestTimelineRedo, requestTimelineUndo } from "@/lib/timelineBus";
 import { cn } from "@/lib/cn";
 import {
+  resolveTimelineLegendVisible,
   resolveTimelineScrollbarVisible,
+  setTimelineLegendVisible,
   setTimelineScrollbarVisible,
-  useTimelineUiStore,
 } from "@/stores/timelineUiStore";
 import { ToolbarGuideButton } from "@/components/ui/quickGuide";
 import { timelineGuide } from "./guideData";
@@ -53,6 +54,24 @@ function OrientationToggle({ instanceId }: { instanceId: string }) {
       className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-all duration-150 hover:bg-hover hover:text-fg active:scale-95"
     >
       {vertical ? <ArrowLeftRight className="size-4" /> : <ArrowUpDown className="size-4" />}
+    </button>
+  );
+}
+
+/** 颜色图例显隐开关（状态按工程持久化；该工具栏项被禁用时图例整体不显示） */
+function LegendToggle({ instanceId }: { instanceId: string }) {
+  useSettingsStore();
+  const visible = resolveTimelineLegendVisible(instanceId);
+  return (
+    <button
+      title={visible ? "隐藏图例" : "显示图例"}
+      onClick={() => setTimelineLegendVisible(instanceId, !visible)}
+      className={cn(
+        "flex h-7 w-7 items-center justify-center rounded-md transition-all duration-150 active:scale-95",
+        visible ? "bg-accent-soft text-accent" : "text-fg-muted hover:bg-hover hover:text-fg",
+      )}
+    >
+      <Layers className="size-4" />
     </button>
   );
 }
@@ -118,10 +137,7 @@ export function registerTimelineToolbar(ctx: PluginContext): void {
     id: "legend",
     title: "显示/隐藏图例",
     groupId: "toolbarLegend",
-    icon: Layers,
-    isActive: ({ legendVisible }) => legendVisible === true,
-    action: () =>
-      useTimelineUiStore.getState().setLegendVisible(!useTimelineUiStore.getState().legendVisible),
+    render: (tctx: ViewToolbarContext) => <LegendToggle instanceId={tctx.instanceId} />,
   });
   ctx.registerContribution("timeline.toolbar", {
     id: "scrollbar",

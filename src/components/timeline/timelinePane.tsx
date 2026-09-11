@@ -29,7 +29,9 @@ import {
 } from "lucide-react";
 import { normalizeDoc, useTimelineStore, DEFAULT_COLOR_LEGEND } from "@/stores/timelineStore";
 import {
+  resolveTimelineLegendVisible,
   resolveTimelineScrollbarVisible,
+  setTimelineLegendVisible,
   useTimelineUiStore,
 } from "@/stores/timelineUiStore";
 import { useAssociationStore } from "@/stores/associationStore";
@@ -186,7 +188,7 @@ function TimelineCanvas({
   const setTickStep = useTimelineStore((s) => s.setTickStep);
   const setLegendHidden = useTimelineStore((s) => s.setLegendHidden);
   const record = useTimelineStore((s) => s.record);
-  const legendVisible = useTimelineUiStore((s) => s.legendVisible);
+  const legendVisible = resolveTimelineLegendVisible(instanceId);
 
   // 图例跨实例共享：从切片读取（而非单文件文档）
   const slice = useTimelineSlice();
@@ -506,12 +508,6 @@ function TimelineCanvas({
     [instanceId, exportTimeline, importTimeline],
   );
 
-  // 图例默认状态（设置项）：进入视图时应用
-  useEffect(() => {
-    useTimelineUiStore.getState().setLegendVisible(
-      resolveSetting(TIMELINE_PROTOTYPE, instanceId, "legendDefault") !== false,
-    );
-  }, [instanceId]);
 
   // —— 撤销 / 重做（实例级快照）——
     const undo = useCallback(() => {
@@ -585,7 +581,7 @@ function TimelineCanvas({
       }
       if (hit("timeline.toggleLegend")) {
         e.preventDefault();
-        useTimelineUiStore.getState().setLegendVisible(!useTimelineUiStore.getState().legendVisible);
+        setTimelineLegendVisible(instanceId, !resolveTimelineLegendVisible(instanceId));
         return;
       }
       if (hit("timeline.fit")) { e.preventDefault(); fit(); return; }

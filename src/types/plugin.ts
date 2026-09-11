@@ -62,8 +62,7 @@ export interface ViewToolbarContext {
   openPanel: (panel: "legend" | "tags" | "assoc") => void;
   /** 当前打开的宿主面板（供 isActive 判断） */
   openPanelId?: string | null;
-  /** 时间轴：图例显隐状态 / 当前使用颜色 */
-  legendVisible?: boolean;
+  /** 时间轴：当前使用颜色（图例显隐已改为工程级实例设置，见 timelineUiStore） */
   currentColor?: string;
   /** 设定库：当前实际布局（含强制网格规则）/ 连线与关系文本颜色 */
   layout?: "graph" | "grid";

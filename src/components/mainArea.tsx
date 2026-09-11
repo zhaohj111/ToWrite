@@ -38,7 +38,6 @@ export function MainArea() {
   const active = views.find((v) => v.id === mainViewId) ?? views[0];
   const [legendOpen, setLegendOpen] = useState(false);
   const [tagOpen, setTagOpen] = useState(false);
-  const legendVisible = useTimelineUiStore((s) => s.legendVisible);
 
   // —— 时间轴关联 chips 横向滚动（隐藏滚动条 + 左键拖动） ——
   const timelineChipsRef = useRef<HTMLDivElement>(null);
@@ -69,7 +68,6 @@ export function MainArea() {
     };
   }, []);
     const [assocOpen, setAssocOpen] = useState(false);
-  const setLegendVisible = useTimelineUiStore((s) => s.setLegendVisible);
   const setLoreLayout = useLoreUiStore((s) => s.setLayout);
   // 布局以「图」为缺省，且计入「搜索/标签筛选强制网格」：
   // 展示与工具栏切换严格一致（显示网格时按钮显示为切换到力导向图，反之亦然）
@@ -146,7 +144,6 @@ export function MainArea() {
             protoId={TIMELINE_PROTOTYPE}
             ctx={{
               instanceId: active.instanceId,
-              legendVisible,
               currentColor: timelineCurrentColorResolved,
               openPanelId: assocOpen ? "assoc" : legendOpen ? "legend" : null,
               openPanel: (panel) => {

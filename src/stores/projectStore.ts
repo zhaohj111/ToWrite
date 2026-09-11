@@ -20,6 +20,7 @@ import {
 } from "@/lib/tauri";
 import { importToDoc, parseImport } from "@/lib/fileFormats/parseImport";
 import { getSetting, setSetting } from "@/lib/settings";
+import { flushSaveNow } from "@/lib/saveController";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { useEditorStore } from "@/stores/editorStore";
 import { useTimelineStore } from "@/stores/timelineStore";
@@ -260,6 +261,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   closeProject: () => {
+    // 先落盘：防抖窗口内的改动（实例设置等）不能因为关工程而丢失
+    flushSaveNow();
     useWorkspaceStore.getState().closeProject();
     useEditorStore.getState().reset();
     useTimelineStore.getState().reset();
